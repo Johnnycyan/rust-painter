@@ -8,10 +8,10 @@ from ui.settings.settings import Settings
 from ui.views.mainui import Ui_MainUI
 from lib.rustDaVinci import rustDaVinci
 
-class MainWindow(QMainWindow):
 
+class MainWindow(QMainWindow):
     def __init__(self, parent=None):
-        """ Main window init """
+        """Main window init"""
         super(MainWindow, self).__init__(parent)
 
         # Setup UI
@@ -36,14 +36,15 @@ class MainWindow(QMainWindow):
         self.is_expanded = False
         self.label = None
 
-
     def connectAll(self):
-        """ Connect all the buttons """
+        """Connect all the buttons"""
         # Add actions to the loadImagePushButton
         loadMenu = QMenu()
         loadMenu.addAction("From File...", self.load_image_file_clicked)
         loadMenu.addAction("From URL...", self.load_image_URL_clicked)
-        self.action_clearImage = loadMenu.addAction("Clear image", self.clear_image_clicked)
+        self.action_clearImage = loadMenu.addAction(
+            "Clear image", self.clear_image_clicked
+        )
         self.action_clearImage.setEnabled(False)
         self.ui.load_image_PushButton.setMenu(loadMenu)
 
@@ -58,9 +59,8 @@ class MainWindow(QMainWindow):
 
         self.ui.preview_PushButton.clicked.connect(self.preview_clicked)
 
-
     def load_image_file_clicked(self):
-        """ Load image from file """
+        """Load image from file"""
         self.rustDaVinci.load_image_from_file()
         if self.rustDaVinci.org_img is not None:
             self.action_clearImage.setEnabled(True)
@@ -69,9 +69,8 @@ class MainWindow(QMainWindow):
             self.label.hide()
             self.expand_window()
 
-
     def load_image_URL_clicked(self):
-        """ Load image from URL """
+        """Load image from URL"""
         self.rustDaVinci.load_image_from_url()
         if self.rustDaVinci.org_img is not None:
             self.action_clearImage.setEnabled(True)
@@ -80,9 +79,8 @@ class MainWindow(QMainWindow):
             self.label.hide()
             self.expand_window()
 
-
     def clear_image_clicked(self):
-        """ Clear the current image """
+        """Clear the current image"""
         self.rustDaVinci.clear_image()
         self.action_clearImage.setEnabled(False)
         self.ui.preview_PushButton.setEnabled(False)
@@ -90,37 +88,32 @@ class MainWindow(QMainWindow):
         self.is_expanded = True
         self.preview_clicked()
 
-
     def locate_ctrl_manually_clicked(self):
-        """ Locate the control area coordinates manually """
+        """Locate the control area coordinates manually"""
         self.rustDaVinci.locate_control_area_manually()
 
-
     def locate_ctrl_automatically_clicked(self):
-        """ Locate the control area coordinates automatically """
+        """Locate the control area coordinates automatically"""
         self.rustDaVinci.locate_control_area_automatically()
 
-
     def paint_image_clicked(self):
-        """ Start the painting process """
+        """Start the painting process"""
         self.rustDaVinci.start_painting()
 
-
     def settings_clicked(self):
-        """ Create an instance of a settings window """
+        """Create an instance of a settings window"""
         settings = Settings(self)
         settings.exec_()
 
-
     def preview_clicked(self):
-        """ Expand the main window and create image object """
+        """Expand the main window and create image object"""
         if self.is_expanded:
             self.ui.preview_PushButton.setText("Show Image >>")
             self.is_expanded = False
             self.setMinimumSize(QSize(240, 450))
             self.setMaximumSize(QSize(240, 450))
             self.resize(240, 450)
-            if self.label != None:
+            if self.label is not None:
                 self.label.hide()
                 self.show_original_PushButton.hide()
                 self.show_normal_PushButton.hide()
@@ -128,9 +121,8 @@ class MainWindow(QMainWindow):
         else:
             self.expand_window()
 
-
     def expand_window(self):
-        """ Expand the mainwindow to show preview images """
+        """Expand the mainwindow to show preview images"""
         self.is_expanded = True
 
         self.ui.preview_PushButton.setText("<< Hide Image")
@@ -171,9 +163,8 @@ class MainWindow(QMainWindow):
         self.show_high_PushButton.show()
         self.show_high_PushButton.clicked.connect(self.show_high_pixmap)
 
-
     def show_original_pixmap(self):
-        """ Show the original quality pixmap"""
+        """Show the original quality pixmap"""
         self.rustDaVinci.pixmap_on_display = 0
         self.label.hide()
         self.show_original_PushButton.hide()
@@ -181,9 +172,8 @@ class MainWindow(QMainWindow):
         self.show_high_PushButton.hide()
         self.expand_window()
 
-
     def show_normal_pixmap(self):
-        """ Show the normal quality pixmap"""
+        """Show the normal quality pixmap"""
         self.rustDaVinci.pixmap_on_display = 1
         self.label.hide()
         self.show_original_PushButton.hide()
@@ -191,9 +181,8 @@ class MainWindow(QMainWindow):
         self.show_high_PushButton.hide()
         self.expand_window()
 
-
     def show_high_pixmap(self):
-        """ Show the high quality pixmap """
+        """Show the high quality pixmap"""
         self.rustDaVinci.pixmap_on_display = 2
         self.label.hide()
         self.show_original_PushButton.hide()
@@ -201,12 +190,10 @@ class MainWindow(QMainWindow):
         self.show_high_PushButton.hide()
         self.expand_window()
 
-
     def show(self):
-        """ Show the main window """
+        """Show the main window"""
         super(MainWindow, self).show()
 
-
     def hide(self):
-        """ Hide the main window """
+        """Hide the main window"""
         super(MainWindow, self).hide()
