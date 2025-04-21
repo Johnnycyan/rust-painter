@@ -2,16 +2,11 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import QRect, QSettings, QSize, Qt
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QMenu, QPushButton
-
-from PIL import Image
-from PIL.ImageQt import ImageQt
+from PyQt5.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QPushButton
 
 from ui.settings.settings import Settings
 from ui.views.mainui import Ui_MainUI
 from lib.rustDaVinci import rustDaVinci
-import ui.resources.icons_rc
 
 class MainWindow(QMainWindow):
 
@@ -67,7 +62,7 @@ class MainWindow(QMainWindow):
     def load_image_file_clicked(self):
         """ Load image from file """
         self.rustDaVinci.load_image_from_file()
-        if self.rustDaVinci.org_img != None:
+        if self.rustDaVinci.org_img is not None:
             self.action_clearImage.setEnabled(True)
             self.ui.preview_PushButton.setEnabled(True)
         if self.is_expanded:
@@ -78,7 +73,7 @@ class MainWindow(QMainWindow):
     def load_image_URL_clicked(self):
         """ Load image from URL """
         self.rustDaVinci.load_image_from_url()
-        if self.rustDaVinci.org_img != None:
+        if self.rustDaVinci.org_img is not None:
             self.action_clearImage.setEnabled(True)
             self.ui.preview_PushButton.setEnabled(True)
         if self.is_expanded:
