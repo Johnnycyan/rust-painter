@@ -58,7 +58,6 @@ class rustDaVinci():
         self.abort = False
 
         # Painting control tools
-        self.ctrl_remove = 0
         self.ctrl_update = 0
         self.ctrl_size = []
         self.ctrl_brush = []
@@ -416,7 +415,7 @@ class rustDaVinci():
         canvas_area = capture_area()
         self.parent.show()
 
-        if canvas_area == False:
+        if not canvas_area:
             return False
         elif canvas_area[2] == 0 or canvas_area[3] == 0:
             msg = QMessageBox(self.parent)
@@ -451,7 +450,7 @@ class rustDaVinci():
         ctrl_area = capture_area()
         self.parent.show()
 
-        if ctrl_area == False:
+        if not ctrl_area:
             self.update()
             return False
         elif ctrl_area[2] == 0 and ctrl_area[3] == 0:
@@ -487,7 +486,7 @@ class rustDaVinci():
         self.parent.show()
 
         msg = QMessageBox(self.parent)
-        if ctrl_area == False:
+        if not ctrl_area:
             msg.setIcon(QMessageBox.Critical)
             msg.setText("Couldn't find the painting control area automatically... Please try to manually capture it instead...")
             msg.exec_()
@@ -552,15 +551,13 @@ class rustDaVinci():
     def calculate_ctrl_tools_positioning(self):
         """ This function calculates the positioning of the different controls in the painting control area.
         The brush size, type and opacity along with all the different colors.
-        Updates:    self.ctrl_remove
-                    self.ctrl_update
+        Updates:    self.ctrl_update
                     self.ctrl_size
                     self.ctrl_brush
                     self.ctrl_opacity
                     self.ctrl_color
         """
         # Reset
-        self.ctrl_remove = 0
         self.ctrl_update = 0
         self.ctrl_size = []
         self.ctrl_brush = []
@@ -593,7 +590,6 @@ class rustDaVinci():
         dist_btwn_y_coords_of_eight = second_y_coord_of_eight - first_y_coord_of_eight
 
         # Set the point location of the remove & update buttons
-        self.ctrl_remove = ((ctrl_x + (ctrl_w/2.7692)), (ctrl_y + (ctrl_h/19.5714)))
         self.ctrl_update = ((ctrl_x + (ctrl_w/1.5652)), (ctrl_y + (ctrl_h/19.5714)))
 
 
