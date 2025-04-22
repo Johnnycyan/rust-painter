@@ -19,6 +19,7 @@ _cancel_processing = False
 def alpha_blend(base_color, top_color, opacity):
     """
     Blend two colors according to the opacity of the top color.
+    This simulates how Rust's paint system blends colors when painting with opacity.
     
     Args:
         base_color (tuple): RGB tuple of the base color (R,G,B)

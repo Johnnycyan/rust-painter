@@ -346,32 +346,32 @@ class rustDaVinci:
             # Ensure image is in RGB mode
             if temp_img.mode != "RGB":
                 temp_img = temp_img.convert("RGB")
-            
-            # Check if the image is very large and offer to resize for faster processing
-            width, height = temp_img.size
-            total_pixels = width * height
-            
-            # Only offer downscaling for very large images
-            if total_pixels > 500000:  # Arbitrary threshold for "large image"
-                scale_factor = min(1.0, 500000 / total_pixels)
                 
-                if scale_factor < 0.9:  # Only if significant downscaling would happen
-                    new_width = int(width * scale_factor)
-                    new_height = int(height * scale_factor)
-                    
-                    msg = QMessageBox(self.parent)
-                    msg.setIcon(QMessageBox.Information)
-                    msg.setWindowTitle("Large Image Detected")
-                    msg.setText(f"The image is large ({width}x{height} = {total_pixels:,} pixels) and may take a long time to process.")
-                    msg.setInformativeText(f"Would you like to temporarily resize to {new_width}x{new_height} for faster color calculation?\n\n" +
-                                           "Note: The final painted image will still use your original resolution.")
-                    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                    response = msg.exec_()
-                    
-                    if response == QMessageBox.Yes:
-                        # Resize for faster processing
-                        temp_img = temp_img.resize((new_width, new_height), Image.LANCZOS)
-                        self.parent.ui.log_TextEdit.append(f"Using reduced resolution ({new_width}x{new_height}) for color calculation...")
+            # Performance optimization for very large images
+            # Set a reasonable limit for pixel count
+            total_pixels = temp_img.width * temp_img.height
+            resize_threshold = 500000  # Adjust based on typical system capabilities
+            
+            if total_pixels > resize_threshold:
+                # Ask user if they want to resize for faster calculation
+                # Calculate new dimensions to fit within threshold while maintaining aspect ratio
+                factor = (resize_threshold / total_pixels) ** 0.5
+                new_width = int(temp_img.width * factor)
+                new_height = int(temp_img.height * factor)
+                
+                msg = QMessageBox(self.parent)
+                msg.setIcon(QMessageBox.Question)
+                msg.setWindowTitle("Large Image Detected")
+                msg.setText(f"This image is very large ({temp_img.width}x{temp_img.height} = {total_pixels:,} pixels).")
+                msg.setInformativeText(f"Would you like to temporarily resize to {new_width}x{new_height} for faster color calculation?\n\n" +
+                                       "Note: The final painted image will still use your original resolution.")
+                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                response = msg.exec_()
+                
+                if response == QMessageBox.Yes:
+                    # Resize for faster processing
+                    temp_img = temp_img.resize((new_width, new_height), Image.LANCZOS)
+                    self.parent.ui.log_TextEdit.append(f"Using reduced resolution ({new_width}x{new_height}) for color calculation...")
             
             # Use ALL 64 base colors from rust_palette
             self.base_palette_colors = rust_palette[:64]
@@ -470,11 +470,13 @@ class rustDaVinci:
                 # Update the log every 10%
                 if percent % 10 == 0:
                     self.parent.ui.log_TextEdit.append(f"Color processing: {percent}% complete")
-                
-                # Process UI events to prevent freezing
+                    
                 QApplication.processEvents()
-                
-                return False  # Continue processing
+                return self.cancel_requested
+            
+            # Define the opacity values
+            # These are SEPARATE from the base colors and are applied during painting
+            self.opacity_values = [1.0, 0.75, 0.5, 0.25]
             
             # Check if we can use multiprocessing for better performance
             try:
@@ -559,7 +561,7 @@ class rustDaVinci:
             if hasattr(self, 'progress_dialog') and self.progress_dialog:
                 self.progress_dialog.close()
             return None
-            
+
     def cancel_color_calculation(self):
         """Cancel the current color calculation process"""
         from lib.color_blending import set_cancel_flag
@@ -734,56 +736,19 @@ class rustDaVinci:
                 background_index = i
                 break
 
-        # Calculate the row of this color in our grid
-        background_row = background_index // 4
-
         # Store background color indices for skip_colors list (used only during painting)
         # This doesn't affect the color palette used for image quantization
         self.background_opacities = []
         if self.settings.value("skip_background_color", default_settings["skip_background_color"]):
-            self.background_opacities = [
-                background_row * 4,     # 100% opacity
-                background_row * 4 + 1, # 75% opacity
-                background_row * 4 + 2, # 50% opacity
-                background_row * 4 + 3, # 25% opacity
-            ]
+            self.background_opacities = [background_index]
 
         # Create a new palette image with the right mode
         self.palette_data = Image.new("P", (16, 16))
         self.updated_palette = []
         
         # Build the palette as a list of RGB tuples for our internal use
-        palette_colors = []
-        
-        # Add colors based on whether we're using all opacity versions or just 100% opacity
-        if use_brush_opacities:
-            # Use all 64 colors from the palette
-            for row in range(16):  # 16 rows
-                for col in range(4):  # 4 columns per row
-                    i = row * 4 + col  # Calculate the index
-                    
-                    # Always include the actual color for image quantization
-                    # (background skipping only affects painting)
-                    base_color = rust_palette[row * 4]  # Get base color for this row
-                    
-                    if col == 0:
-                        # 100% opacity - use the original color
-                        color = base_color
-                    else:
-                        # Calculate opacity variation (75%, 50%, 25%)
-                        opacity = 1.0 - (col * 0.25)
-                        r = max(0, min(255, int(base_color[0] * opacity)))
-                        g = max(0, min(255, int(base_color[1] * opacity)))
-                        b = max(0, min(255, int(base_color[2] * opacity)))
-                        color = (r, g, b)
-                    
-                    palette_colors.append(color)
-        else:
-            # Only use the 16 base colors (100% opacity)
-            for row in range(16):
-                i = row * 4  # First color of each row (100% opacity)
-                color = rust_palette[i]
-                palette_colors.append(color)
+        # Always use the full 64 colors at 100% opacity from the rust_palette
+        palette_colors = rust_palette[:64].copy()
 
         # Store the final palette for our use
         self.updated_palette = palette_colors.copy()
@@ -1152,13 +1117,13 @@ class rustDaVinci:
 
         # Brush types
         # Paint Brush is 38.17% from the left edge and 9.54% from the top edge
-        self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.3817), ctrl_y + (ctrl_h * 0.0954)))
-        # Medium Round Brush is 26.42% from the left edge and 24.4% from the top edge
-        self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.2642), ctrl_y + (ctrl_h * 0.244)))
+        # self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.3817), ctrl_y + (ctrl_h * 0.0954)))
         # Light Round Brush is 14.5% from the left edge and 24.4% from the top edge
         self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.145), ctrl_y + (ctrl_h * 0.244)))
         # Heavy Round Brush is 38.17% from the left edge and 24.4% from the top edge
         self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.3817), ctrl_y + (ctrl_h * 0.244)))
+        # Medium Round Brush is 26.42% from the left edge and 24.4% from the top edge
+        self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.2642), ctrl_y + (ctrl_h * 0.244)))
         # Heavy Square Brush is 49.72% from the left edge and 24.4% from the top edge
         self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.4972), ctrl_y + (ctrl_h * 0.244)))
         
@@ -1385,86 +1350,122 @@ class rustDaVinci:
             self.parent.show()
         self.parent.activateWindow()
 
-    def choose_painting_controls(self, size, brush, color_idx):
+    def choose_painting_controls(self, size, brush, color_idx, opacity_value=None):
         """Choose the paint controls
         
         Args:
             size (int): Brush size (0: small (2), 1: medium (4), 2: large (6), etc.)
             brush (int): Brush type index
             color_idx (int): Color index in the palette grid (0-63)
+            opacity_value (float, optional): If provided, directly set this opacity value (0-1)
         """
         self.parent.ui.log_TextEdit.append(f"Selecting controls: size={size}, brush={brush}, color={color_idx}")
         QApplication.processEvents()
+        
+        # Longer delay for control area interactions
+        ctrl_interaction_delay = max(0.3, self.ctrl_area_delay * 1.5)
         
         # Log the actual color we're selecting for debugging
         if color_idx < len(self.updated_palette):
             rgb_color = self.updated_palette[color_idx] if color_idx < len(self.updated_palette) else "unknown"
             hex_color = rgb_to_hex(rgb_color) if isinstance(rgb_color, tuple) else "unknown"
-            opacity_percent = 100
-            if color_idx % 4 == 1:
-                opacity_percent = 75
-            elif color_idx % 4 == 2:
-                opacity_percent = 50
-            elif color_idx % 4 == 3:
-                opacity_percent = 25
+            
+            # Determine opacity percentage
+            if opacity_value is not None:
+                opacity_percent = int(opacity_value * 100)
+            else:
+                # Default opacities based on column (for backward compatibility)
+                opacity_percent = 100
+                if color_idx % 4 == 1:
+                    opacity_percent = 75
+                elif color_idx % 4 == 2:
+                    opacity_percent = 50
+                elif color_idx % 4 == 3:
+                    opacity_percent = 25
+                    
             self.parent.ui.log_TextEdit.append(f"Color: {hex_color}, Opacity: {opacity_percent}%")
             QApplication.processEvents()
 
-        # 1. Select brush type first
+        # 1. Select brush type first - always double click
         if self.current_ctrl_brush != brush:
             self.current_ctrl_brush = brush
             self.parent.ui.log_TextEdit.append("Selecting brush type")
             QApplication.processEvents()
-            self.click_pixel(self.ctrl_brush[brush])
-            time.sleep(self.ctrl_area_delay)
+            # Double click the brush type button
+            pyautogui.click(self.ctrl_brush[brush][0], self.ctrl_brush[brush][1])
+            time.sleep(0.1)  # Short delay between clicks
+            pyautogui.click(self.ctrl_brush[brush][0], self.ctrl_brush[brush][1])
+            time.sleep(ctrl_interaction_delay)
 
         # 2. Set brush size (text input box)
-        brush_size = str(2 + (size * 2)) if size >= 0 else "2"  # Default to 2
+        brush_size = str(1 + (size * 2)) if size >= 0 else "1"  # Default to 1
         if self.current_ctrl_size != size:
             self.current_ctrl_size = size
             self.parent.ui.log_TextEdit.append(f"Setting brush size: {brush_size}")
             QApplication.processEvents()
-            # Click to focus the size box
-            self.click_pixel(self.ctrl_size[0])
-            time.sleep(self.ctrl_area_delay)
+            
+            # Double click to focus the size box
+            pyautogui.click(self.ctrl_size[0][0], self.ctrl_size[0][1])
+            time.sleep(0.1)  # Short delay between clicks
+            pyautogui.click(self.ctrl_size[0][0], self.ctrl_size[0][1])
+            time.sleep(ctrl_interaction_delay)
+            
             # Select all existing text
             pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.1)
+            time.sleep(0.2)  # Longer delay after Ctrl+A
+            
             # Type the brush size
             pyautogui.typewrite(brush_size)
-            time.sleep(0.1)
+            time.sleep(0.2)  # Longer delay after typing
+            
             # Press Enter
             pyautogui.press("enter")
-            time.sleep(self.ctrl_area_delay)
+            time.sleep(ctrl_interaction_delay)
 
         # 3. Set opacity (text input box)
-        # Convert color_idx to opacity percentage for Rust (25, 50, 75, 100)
-        opacity_percent = "1"  # Default opacity: 100%
-        if color_idx % 4 == 1:
-            opacity_percent = "0.75"
-        elif color_idx % 4 == 2:
-            opacity_percent = "0.5"
-        elif color_idx % 4 == 3:
-            opacity_percent = "0.25"
+        # Determine opacity value string
+        if opacity_value is not None:
+            # Use provided opacity value
+            if opacity_value == 0.75:
+                opacity_value = 0.37
+            elif opacity_value == 0.5:
+                opacity_value = 0.25
+            elif opacity_value == 0.25:
+                opacity_value = 0.12
+            opacity_percent = str(opacity_value)
+        else:
+            # Default opacity based on color index column
+            opacity_percent = "1"  # Default opacity: 100%
+            if color_idx % 4 == 1:
+                opacity_percent = "0.75"
+            elif color_idx % 4 == 2:
+                opacity_percent = "0.5"
+            elif color_idx % 4 == 3:
+                opacity_percent = "0.25"
 
         # Always set opacity to ensure it's correct
-        self.parent.ui.log_TextEdit.append(f"Setting opacity: {opacity_percent}%")
+        self.parent.ui.log_TextEdit.append(f"Setting opacity: {opacity_percent}")
         QApplication.processEvents()
         
-        # Click to focus the opacity text box
-        self.click_pixel(self.ctrl_opacity[0]) 
-        time.sleep(self.ctrl_area_delay)
+        # Double click to focus the opacity text box
+        pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
+        time.sleep(0.1)  # Short delay between clicks
+        pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
+        time.sleep(ctrl_interaction_delay)
+        
         # Select all existing text
         pyautogui.hotkey('ctrl', 'a')
-        time.sleep(0.1)
-        # Type the opacity percentage value (25, 50, 75, 100)
+        time.sleep(0.2)  # Longer delay after Ctrl+A
+        
+        # Type the opacity percentage value
         pyautogui.typewrite(opacity_percent)
-        time.sleep(0.1)
+        time.sleep(0.2)  # Longer delay after typing
+        
         # Press Enter
         pyautogui.press("enter")
-        time.sleep(self.ctrl_area_delay)
+        time.sleep(ctrl_interaction_delay)
 
-        # 4. Select the color from the grid
+        # 4. Select the color from the grid - always double click
         if self.current_ctrl_color != color_idx:
             self.current_ctrl_color = color_idx
             
@@ -1478,8 +1479,12 @@ class rustDaVinci:
             if grid_idx < len(self.ctrl_color):
                 self.parent.ui.log_TextEdit.append(f"Selecting color at grid position: row={row}, column={column}")
                 QApplication.processEvents()
-                self.click_pixel(self.ctrl_color[grid_idx])
-                time.sleep(self.ctrl_area_delay)
+                
+                # Double click the color in the grid
+                pyautogui.click(self.ctrl_color[grid_idx][0], self.ctrl_color[grid_idx][1])
+                time.sleep(0.1)  # Short delay between clicks
+                pyautogui.click(self.ctrl_color[grid_idx][0], self.ctrl_color[grid_idx][1])
+                time.sleep(ctrl_interaction_delay)
             else:
                 self.parent.ui.log_TextEdit.append(f"Error: Invalid color grid index: {grid_idx}")
                 QApplication.processEvents()
@@ -1673,13 +1678,8 @@ class rustDaVinci:
                     break
             
             if background_idx != -1:
-                # Use row * 4 to get the 100% opacity version of this color
-                color_idx = background_idx 
-                opacity_idx = 0  # 100% opacity
-                
-                # Calculate color position in the grid
-                brush_type = int(self.settings.value("brush_type", default_settings["brush_type"]))
-                self.choose_painting_controls(5, brush_type, color_idx * 4)
+                # Background should use 100% opacity
+                self.choose_painting_controls(5, int(self.settings.value("brush_type", default_settings["brush_type"])), background_idx)
                 
                 # Paint the background
                 x_start = self.canvas_x + 10
@@ -1753,9 +1753,9 @@ class rustDaVinci:
             QApplication.processEvents()
             
             # Set painting controls for this color and opacity
-            # Calculate grid position (color_idx is row, opacity_idx is column)
-            grid_position = color_idx * 4 + opacity_idx
-            self.choose_painting_controls(0, brush_type, grid_position)
+            # Pass the color index directly (0-63) without multiplying by 4
+            # The choose_painting_controls method will handle selecting the right color and setting opacity separately
+            self.choose_painting_controls(0, brush_type, color_idx, opacity_value=opacity)
             
             # Paint all pixels with this color/opacity combination
             for (x, y), layers in self.layered_colors_map.items():
