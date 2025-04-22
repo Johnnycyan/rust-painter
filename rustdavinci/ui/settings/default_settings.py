@@ -29,5 +29,8 @@ default_settings = {
     "ctrl_area_delay": 180,
     "line_delay": 30,
     "minimum_line_width": 10,
-    "brush_type": 1
+    "brush_type": 1,
+    # New cache settings
+    "use_cached_data": 1,         # Whether to use cached color calculations if available
+    "auto_save_cache": 1          # Whether to automatically save color calculations to cache
 }

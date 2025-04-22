@@ -41,6 +41,14 @@ class rustDaVinci:
         self.layered_colors_map = None
         self.base_palette_colors = []
         self.opacity_values = [1.0, 0.75, 0.5, 0.25]  # 100%, 75%, 50%, 25%
+        
+        # Cache for storing calculated color data to avoid recalculation
+        self.color_calculation_cache = {
+            'resized_img': None,         # Stores the resized image
+            'layered_colors_map': None,  # Stores the calculated color layers
+            'simulated_img': None,       # Stores the simulated result image
+            'background_color': None     # The background color used for calculation
+        }
 
         # Pixmaps
         self.pixmap_on_display = 0
@@ -157,6 +165,15 @@ class rustDaVinci:
         if path.endswith((".png", ".jpg", "jpeg", ".gif", ".bmp")):
             try:
                 self.settings.setValue("folder_path", path)
+                # Clear previous data
+                self.layered_colors_map = None
+                self.color_calculation_cache = {
+                    'resized_img': None,
+                    'layered_colors_map': None,
+                    'simulated_img': None,
+                    'background_color': None
+                }
+                
                 # Pixmap for original image
                 self.org_img_pixmap = QPixmap(path, "1")
 
@@ -164,6 +181,20 @@ class rustDaVinci:
                 self.org_img_template = Image.open(path).convert("RGBA")
                 self.org_img = self.org_img_template
 
+                # Check if we should try to load cached data
+                use_cached_data = bool(
+                    self.settings.value("use_cached_data", True)
+                )
+                
+                if use_cached_data:
+                    # Get background color for cache check
+                    bg_color_hex = self.settings.value("background_color", default_settings["background_color"])
+                    bg_color_rgb = hex_to_rgb(bg_color_hex)
+                    
+                    # Try to load cached data
+                    if self.load_calculation_cache(path, bg_color_rgb):
+                        self.parent.ui.log_TextEdit.append("Using cached color calculations")
+                
                 self.convert_transparency()
                 self.create_pixmaps()
 
@@ -348,75 +379,152 @@ class rustDaVinci:
             # Create progress dialog
             self.parent.ui.log_TextEdit.append("Starting optimal color layering calculation...")
             
-            # Setup progress tracking in UI
-            self.progress_dialog = QMessageBox(self.parent)
+            # Create a much larger custom dialog for progress display instead of using QMessageBox
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+            
+            # Create custom dialog with proper size
+            self.progress_dialog = QDialog(self.parent)
             self.progress_dialog.setWindowTitle("Calculating Optimal Colors")
-            self.progress_dialog.setText("Processing image colors...\nThis may take a moment.")
-            self.progress_dialog.setIcon(QMessageBox.Information)
-            self.progress_dialog.setStandardButtons(QMessageBox.Cancel)
+            self.progress_dialog.setMinimumWidth(600)  # Much wider dialog
+            self.progress_dialog.setMinimumHeight(200) # Much taller dialog
+            self.progress_dialog.setModal(False)       # Non-modal dialog
             
-            # Add a progress bar
+            # Create layout
+            layout = QVBoxLayout()
+            
+            # Add main information label
+            info_label = QLabel("Processing image colors...\nThis may take a moment.", self.progress_dialog)
+            info_label.setStyleSheet("font-size: 11pt; font-weight: bold;")
+            layout.addWidget(info_label)
+            
+            # Add spacer
+            layout.addSpacing(10)
+            
+            # Add progress bar with better size
             self.progress_bar = QProgressBar(self.progress_dialog)
-            self.progress_bar.setGeometry(30, 60, 400, 20)
-            self.progress_bar.setValue(0)
+            self.progress_bar.setMinimumHeight(30)  # Taller progress bar
+            layout.addWidget(self.progress_bar)
             
-            # Add status label for time estimates
-            self.progress_status = QLabel(self.progress_dialog)
-            self.progress_status.setGeometry(30, 85, 400, 20)
-            self.progress_status.setText("Calculating...")
+            # Add status label with better formatting
+            self.progress_status = QLabel("Calculating...", self.progress_dialog)
+            self.progress_status.setStyleSheet("font-size: 10pt;")
+            self.progress_status.setMinimumHeight(30)  # Ensure enough height
+            layout.addWidget(self.progress_status)
             
-            # Show the dialog non-modally
-            self.progress_dialog.setModal(False)
+            # Add spacer
+            layout.addSpacing(10)
+            
+            # Add cancel button in its own layout for better positioning
+            button_layout = QHBoxLayout()
+            button_layout.addStretch()
+            cancel_button = QPushButton("Cancel", self.progress_dialog)
+            cancel_button.setMinimumWidth(100)
+            cancel_button.setMinimumHeight(30)
+            cancel_button.clicked.connect(self.cancel_color_calculation)
+            button_layout.addWidget(cancel_button)
+            layout.addLayout(button_layout)
+            
+            # Set the layout on the dialog
+            self.progress_dialog.setLayout(layout)
+            
+            # Show the dialog
             self.progress_dialog.show()
             QApplication.processEvents()
             
-            # Get background color
+            # Background color for calculations
+            background_color = rust_palette[0]  # Default to first color
             bg_color_hex = self.settings.value("background_color", default_settings["background_color"])
-            background_color = hex_to_rgb(bg_color_hex)
+            bg_color_rgb = hex_to_rgb(bg_color_hex)
             
-            # Define progress update callback
+            if bg_color_rgb in rust_palette:
+                background_color = bg_color_rgb
+            
+            # Store the background color used for calculation
+            self.background_color = background_color
+            
+            # Update callback function to update the progress dialog
+            self.cancel_requested = False
+            
             def update_progress(percent, elapsed, remaining):
-                if hasattr(self, 'progress_dialog') and self.progress_dialog:
-                    self.progress_bar.setValue(percent)
+                if self.cancel_requested:
+                    return True  # Signal to stop processing
                     
-                    # Format time strings
-                    elapsed_str = time.strftime("%M:%S", time.gmtime(int(elapsed)))
-                    remaining_str = time.strftime("%M:%S", time.gmtime(int(remaining)))
+                self.progress_bar.setValue(percent)
+                
+                # Format time strings
+                elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
+                remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
+                
+                # Update status message
+                if percent < 50:
+                    stage = "Analyzing color groups"
+                elif percent < 90:
+                    stage = "Processing pixels"
+                else:
+                    stage = "Finalizing"
                     
-                    # Update status text
-                    self.progress_status.setText(f"Progress: {percent}% | Elapsed: {elapsed_str} | Remaining: {remaining_str}")
-                    QApplication.processEvents()
-                    
-                    # Check if user canceled
-                    if not self.progress_dialog:
-                        raise Exception("User canceled color calculation")
+                status_text = f"{stage}: {percent}% complete | "
+                status_text += f"Elapsed: {elapsed_str} | Remaining: {remaining_str}"
+                self.progress_status.setText(status_text)
+                
+                # Update the log every 10%
+                if percent % 10 == 0:
+                    self.parent.ui.log_TextEdit.append(f"Color processing: {percent}% complete")
+                
+                # Process UI events to prevent freezing
+                QApplication.processEvents()
+                
+                return False  # Continue processing
             
-            # Connect the cancel button
-            self.progress_dialog.buttonClicked.connect(self.cancel_color_calculation)
-            
-            # Calculate optimal layering for each pixel with improved quality settings
-            # Using at least 2 layers for better color reproduction, allow up to 3 if configured
-            max_layers = max(2, int(self.settings.value("max_color_layers", 3)))
-            
-            self.parent.ui.log_TextEdit.append(f"Using up to {max_layers} color layers for optimal color matching with full 64-color palette...")
-            
-            self.layered_colors_map = create_layered_colors_map(
-                temp_img,
-                background_color, 
-                self.base_palette_colors,
-                self.opacity_values, 
-                max_layers=max_layers,
-                update_callback=update_progress
-            )
-            
+            # Check if we can use multiprocessing for better performance
+            try:
+                import multiprocessing
+                # Only use parallel processing if we have at least 2 cores and a big enough image
+                if multiprocessing.cpu_count() > 1 and total_pixels > 100000:
+                    from lib.color_blending import create_layered_colors_map_parallel
+                    self.parent.ui.log_TextEdit.append(f"Using parallel processing with {multiprocessing.cpu_count()} cores")
+                    self.layered_colors_map = create_layered_colors_map_parallel(
+                        temp_img,
+                        background_color,
+                        self.base_palette_colors,
+                        self.opacity_values,
+                        max_layers=2,
+                        update_callback=update_progress
+                    )
+                else:
+                    # Fall back to single-threaded for small images
+                    from lib.color_blending import create_layered_colors_map
+                    self.layered_colors_map = create_layered_colors_map(
+                        temp_img,
+                        background_color,
+                        self.base_palette_colors,
+                        self.opacity_values,
+                        max_layers=2,
+                        update_callback=update_progress
+                    )
+            except (ImportError, AttributeError) as e:
+                # Fall back to single-threaded if multiprocessing fails
+                self.parent.ui.log_TextEdit.append(f"Using single-threaded processing: {str(e)}")
+                from lib.color_blending import create_layered_colors_map
+                self.layered_colors_map = create_layered_colors_map(
+                    temp_img,
+                    background_color,
+                    self.base_palette_colors,
+                    self.opacity_values,
+                    max_layers=2,
+                    update_callback=update_progress
+                )
+                
             # Close the progress dialog
-            if hasattr(self, 'progress_dialog') and self.progress_dialog:
-                self.progress_dialog.accept()
-                self.progress_dialog = None
+            self.progress_dialog.close()
             
-            # Create a simulated image based on calculated color layers
-            self.parent.ui.log_TextEdit.append("Creating preview image with layered colors...")
-            simulated = simulate_layered_image(
+            if self.cancel_requested:
+                self.parent.ui.log_TextEdit.append("Color calculation was cancelled")
+                return None
+                
+            # Create the simulated output image
+            from lib.color_blending import simulate_layered_image
+            self.simulated_img = simulate_layered_image(
                 temp_img,
                 background_color,
                 self.base_palette_colors,
@@ -424,49 +532,43 @@ class rustDaVinci:
                 self.layered_colors_map
             )
             
-            # If we resized the image, scale the layered_colors_map back to original size
-            if temp_img.size != image.size:
-                self.parent.ui.log_TextEdit.append("Scaling color data back to original resolution...")
-                scale_x = image.width / temp_img.width
-                scale_y = image.height / temp_img.height
-                
-                scaled_map = {}
-                for (x, y), layers in self.layered_colors_map.items():
-                    # Map coordinates back to original image space
-                    orig_x = min(int(x * scale_x), image.width - 1)
-                    orig_y = min(int(y * scale_y), image.height - 1)
-                    scaled_map[(orig_x, orig_y)] = layers
-                
-                self.layered_colors_map = scaled_map
-                
-                # Also create a scaled-up simulated image
-                simulated = simulated.resize(image.size, Image.LANCZOS)
+            # Cache the calculation results
+            self.color_calculation_cache = {
+                'resized_img': temp_img,
+                'layered_colors_map': self.layered_colors_map,
+                'simulated_img': self.simulated_img,
+                'background_color': background_color
+            }
             
-            self.parent.ui.log_TextEdit.append("Color layering calculation complete!")
+            # Convert the simulated image to PIL format for quantization
+            quantized_img = self.simulated_img
             
-            # Store the simulation as our quantized image
-            return simulated
+            # Log statistics
+            pixel_count = sum(1 for _ in self.layered_colors_map.values())
+            self.parent.ui.log_TextEdit.append(
+                f"Optimal color layering complete: {pixel_count:,} pixels will be painted " +
+                f"({pixel_count / total_pixels:.1%} of image)"
+            )
+            
+            return quantized_img
             
         except Exception as e:
-            self.parent.ui.log_TextEdit.append(f"Error in color calculation: {str(e)}")
-            print(f"Error in optimized_quantize_to_palette: {str(e)}")
-            
-            # Close the progress dialog if it's open
+            import traceback
+            self.parent.ui.log_TextEdit.append(f"Error during color calculation: {str(e)}")
+            self.parent.ui.log_TextEdit.append(traceback.format_exc())
             if hasattr(self, 'progress_dialog') and self.progress_dialog:
-                self.progress_dialog.accept()
-                self.progress_dialog = None
-                
-            # If error occurs, fall back to standard quantization
-            self.parent.ui.log_TextEdit.append("Falling back to standard color mapping...")
-            return self.quantize_to_palette(image)
-    
-    def cancel_color_calculation(self, button):
-        """Cancel the color calculation process"""
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
-            self.progress_dialog.accept()
-            self.progress_dialog = None
-            self.parent.ui.log_TextEdit.append("Color calculation canceled by user.")
-            raise Exception("Color calculation canceled by user")
+                self.progress_dialog.close()
+            return None
+            
+    def cancel_color_calculation(self):
+        """Cancel the current color calculation process"""
+        from lib.color_blending import set_cancel_flag
+        self.cancel_requested = True
+        # Set the global cancellation flag that all processes will check
+        set_cancel_flag(True)
+        self.parent.ui.log_TextEdit.append("Cancelling color calculation...")
+        self.parent.ui.log_TextEdit.append("Please wait while worker processes are terminated...")
+        QApplication.processEvents()
 
     def create_pixmaps(self):
         """Create quantized pixmaps"""
@@ -479,6 +581,12 @@ class rustDaVinci:
             # Generate the optimized image with layered colors
             # This replaces the previous quantization method with our new one
             optimized_img = self.optimized_quantize_to_palette(self.org_img)
+            
+            # If the optimization was cancelled or failed, return early to prevent crashes
+            if optimized_img is None:
+                self.org_img_ok = False
+                self.parent.ui.log_TextEdit.append("Image processing cancelled or failed. Please try again.")
+                return
             
             # Save optimized image for normal preview
             optimized_img.save("temp_normal.png")
@@ -495,6 +603,9 @@ class rustDaVinci:
         except Exception as e:
             print(f"Error creating pixmaps: {str(e)}")
             self.org_img_ok = False
+            # Set the pixmaps to None to prevent further crashes
+            self.quantized_img_pixmap_normal = None
+            self.quantized_img_pixmap_high = None
 
     def convert_img(self):
         """Convert the image to fit the canvas and quantize the image.
@@ -503,60 +614,112 @@ class rustDaVinci:
                     y_correction
         Returns:    False, if the image type is invalid.
         """
-        org_img_w = self.org_img.size[0]
-        org_img_h = self.org_img.size[1]
-
-        wpercent = self.canvas_w / float(org_img_w)
-        hpercent = self.canvas_h / float(org_img_h)
-
-        hsize = int((float(org_img_h) * float(wpercent)))
-        wsize = int((float(org_img_w) * float(hpercent)))
-
-        x_correction = 0
-        y_correction = 0
-
-        if hsize <= self.canvas_h:
-            resized_img = self.org_img.resize((self.canvas_w, hsize), Image.ANTIALIAS)
-            y_correction = int((self.canvas_h - hsize) / 2)
-        elif wsize <= self.canvas_w:
-            resized_img = self.org_img.resize((wsize, self.canvas_h), Image.ANTIALIAS)
-            x_correction = int((self.canvas_w - wsize) / 2)
-        else:
-            resized_img = self.org_img.resize(
-                (self.canvas_w, self.canvas_h), Image.ANTIALIAS
-            )
-
-        # Process the image using our optimal color layering algorithm
+        if not self.org_img:
+            self.parent.ui.log_TextEdit.append("Error: No image loaded")
+            return False
+            
         try:
-            self.parent.ui.log_TextEdit.append("Calculating optimal color layering...")
-            QApplication.processEvents()
+            org_img_w = self.org_img.size[0]
+            org_img_h = self.org_img.size[1]
+
+            wpercent = self.canvas_w / float(org_img_w)
+            hpercent = self.canvas_h / float(org_img_h)
+
+            hsize = int((float(org_img_h) * float(wpercent)))
+            wsize = int((float(org_img_w) * float(hpercent)))
+
+            x_correction = 0
+            y_correction = 0
+
+            # Use Image.LANCZOS instead of deprecated Image.ANTIALIAS
+            if hsize <= self.canvas_h:
+                resized_img = self.org_img.resize((self.canvas_w, hsize), Image.LANCZOS)
+                y_correction = int((self.canvas_h - hsize) / 2)
+            elif wsize <= self.canvas_w:
+                resized_img = self.org_img.resize((wsize, self.canvas_h), Image.LANCZOS)
+                x_correction = int((self.canvas_w - wsize) / 2)
+            else:
+                resized_img = self.org_img.resize(
+                    (self.canvas_w, self.canvas_h), Image.LANCZOS
+                )
+
+            # Get background color for comparison
+            bg_color_hex = self.settings.value("background_color", default_settings["background_color"])
+            bg_color_rgb = hex_to_rgb(bg_color_hex)
             
-            self.quantized_img = self.optimized_quantize_to_palette(resized_img)
-            
-            if not self.quantized_img:
-                self.org_img = None
-                self.quantized_img = None
-                self.org_img_ok = False
-                return False
+            # Get the current loaded image path for cache saving
+            current_image_path = self.settings.value("folder_path", "")
+
+            # First try to use cached calculations if available
+            if (self.color_calculation_cache['resized_img'] is not None and
+                self.color_calculation_cache['background_color'] == bg_color_rgb and
+                self.color_calculation_cache['simulated_img'] is not None):
                 
-        except Exception as e:
-            # Fall back to standard quantization if optimal fails
-            print(f"Error in optimal color layering: {str(e)}")
-            self.parent.ui.log_TextEdit.append("Using standard quantization as fallback...")
-            QApplication.processEvents()
+                # Images should have the same dimensions to reuse calculation
+                if (self.color_calculation_cache['resized_img'].size == resized_img.size):
+                    self.parent.ui.log_TextEdit.append("Reusing previously calculated color mapping...")
+                    QApplication.processEvents()
+                    
+                    # Reuse the existing calculation
+                    self.quantized_img = self.color_calculation_cache['simulated_img']
+                    self.layered_colors_map = self.color_calculation_cache['layered_colors_map']
+                    
+            # If no cache or cache doesn't match, calculate optimal colors
+            if self.quantized_img is None:
+                # Process the image using our optimal color layering algorithm
+                try:
+                    self.parent.ui.log_TextEdit.append("Calculating optimal color layering...")
+                    QApplication.processEvents()
+                    
+                    # Store the new calculation
+                    self.color_calculation_cache['resized_img'] = resized_img.copy()
+                    self.color_calculation_cache['background_color'] = bg_color_rgb
+                    
+                    self.quantized_img = self.optimized_quantize_to_palette(resized_img)
+                    
+                    # If the optimized quantization failed, fall back to basic quantization
+                    if self.quantized_img is None:
+                        self.parent.ui.log_TextEdit.append("Optimal quantization failed, using standard quantization...")
+                        self.quantized_img = self.quantize_to_palette(resized_img)
+                    else:
+                        # Store the result in the cache
+                        self.color_calculation_cache['simulated_img'] = self.quantized_img.copy()
+                        self.color_calculation_cache['layered_colors_map'] = self.layered_colors_map
+                        
+                        # Save calculation to cache file if setting is enabled
+                        auto_save_cache = bool(
+                            self.settings.value("auto_save_cache", True)
+                        )
+                        
+                        if auto_save_cache and current_image_path and os.path.isfile(current_image_path):
+                            self.save_calculation_cache(current_image_path)
+                        
+                except Exception as e:
+                    # Fall back to standard quantization if optimal fails
+                    self.parent.ui.log_TextEdit.append(f"Error in optimal color layering: {str(e)}")
+                    self.parent.ui.log_TextEdit.append("Using standard quantization as fallback...")
+                    QApplication.processEvents()
+                    
+                    self.quantized_img = self.quantize_to_palette(resized_img)
             
-            self.quantized_img = self.quantize_to_palette(resized_img)
-            if not self.quantized_img:
-                self.org_img = None
-                self.quantized_img = None
+            # Final check if we have a quantized image
+            if self.quantized_img is None:
+                self.parent.ui.log_TextEdit.append("Error: Image processing failed completely")
                 self.org_img_ok = False
                 return False
 
-        self.canvas_x += x_correction
-        self.canvas_y += y_correction
-        self.canvas_w = self.quantized_img.size[0]
-        self.canvas_h = self.quantized_img.size[1]
-        return True
+            # Update the canvas dimensions
+            self.canvas_x += x_correction
+            self.canvas_y += y_correction
+            self.canvas_w = self.quantized_img.size[0]
+            self.canvas_h = self.quantized_img.size[1]
+            return True
+            
+        except Exception as e:
+            import traceback
+            self.parent.ui.log_TextEdit.append(f"Error converting image: {str(e)}")
+            self.parent.ui.log_TextEdit.append(traceback.format_exc())
+            return False
 
     def update_palette(self, rgb_background):
         """Update the palette used for image quantization with the new 4x16 color grid"""
@@ -745,13 +908,25 @@ class rustDaVinci:
                     self.canvas_w,
                     self.canvas_h
         """
+        # Check if we have a quantized image to use as preview
+        preview_img = None
+        if self.org_img_ok:
+            # Use the original or quantized image as a preview
+            if self.quantized_img:
+                # If we have a processed image, use it
+                preview_img = self.quantized_img
+            elif self.org_img:
+                # Otherwise fall back to the original image
+                preview_img = self.org_img
+                
         dialog = CaptureAreaDialog(self.parent, 0)
         ans = dialog.exec_()
         if ans == 0:
             return False
 
         self.parent.hide()
-        canvas_area = capture_area()
+        # Pass the preview image to the capture_area function
+        canvas_area = capture_area(preview_image=preview_img)
         self.parent.show()
 
         if not canvas_area:
@@ -765,7 +940,9 @@ class rustDaVinci:
             msg.exec_()
             return False
 
+        # Show confirmation with area details
         msg = QMessageBox(self.parent)
+        msg.setWindowTitle("Canvas Area Selected")
         msg.setIcon(QMessageBox.Information)
         msg.setText(
             "Coordinates:\n"
@@ -781,12 +958,28 @@ class rustDaVinci:
             + "Height =\t"
             + str(canvas_area[3])
         )
+        
+        # Only show "Continue to iterate?" if we have color calculations
+        if self.color_calculation_cache['simulated_img'] is not None:
+            msg.setInformativeText("Continue to iterate with the current color calculation?")
+        
+        # Create custom buttons instead of using setButtonText
+        continue_btn = msg.addButton("Continue", QMessageBox.YesRole)
+        try_again_btn = msg.addButton("Try Again", QMessageBox.NoRole)
+        msg.setDefaultButton(continue_btn)
+        
         msg.exec_()
-
+        
+        if msg.clickedButton() == try_again_btn:
+            # User wants to try again
+            return self.locate_canvas_area()
+        
+        # Store the canvas area coordinates
         self.canvas_x = canvas_area[0]
         self.canvas_y = canvas_area[1]
         self.canvas_w = canvas_area[2]
         self.canvas_h = canvas_area[3]
+        
         return True
 
     def locate_control_area_manually(self):
@@ -947,9 +1140,15 @@ class rustDaVinci:
 
         # Update button position (at 50% from left, 105.56% from top)
         self.ctrl_update = (ctrl_x + (ctrl_w * 0.5), ctrl_y + (ctrl_h * 1.0556))
+        # Store in settings for the test overlay
+        self.settings.setValue("overlay_update_x", self.ctrl_update[0])
+        self.settings.setValue("overlay_update_y", self.ctrl_update[1])
 
         # Size box for text input (at 89.54% from left, 29.96% from top)
         self.ctrl_size.append((ctrl_x + (ctrl_w * 0.8954), ctrl_y + (ctrl_h * 0.2996)))
+        # Store in settings for the test overlay
+        self.settings.setValue("overlay_size_x", self.ctrl_size[0][0])
+        self.settings.setValue("overlay_size_y", self.ctrl_size[0][1])
 
         # Brush types
         # Paint Brush is 38.17% from the left edge and 9.54% from the top edge
@@ -962,11 +1161,20 @@ class rustDaVinci:
         self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.3817), ctrl_y + (ctrl_h * 0.244)))
         # Heavy Square Brush is 49.72% from the left edge and 24.4% from the top edge
         self.ctrl_brush.append((ctrl_x + (ctrl_w * 0.4972), ctrl_y + (ctrl_h * 0.244)))
+        
+        # Store brush positions in settings for the test overlay
+        for i, pos in enumerate(self.ctrl_brush):
+            self.settings.setValue(f"overlay_brush_{i}_x", pos[0])
+            self.settings.setValue(f"overlay_brush_{i}_y", pos[1])
+        self.settings.setValue("overlay_brush_count", len(self.ctrl_brush))
 
         # Opacity box for text input (at 89.54% from left, 39.25% from top)
         self.ctrl_opacity.append(
             (ctrl_x + (ctrl_w * 0.8954), ctrl_y + (ctrl_h * 0.3925))
         )
+        # Store in settings for the test overlay
+        self.settings.setValue("overlay_opacity_x", self.ctrl_opacity[0][0])
+        self.settings.setValue("overlay_opacity_y", self.ctrl_opacity[0][1])
 
         # Calculate color grid positions
         # First row and column of colors is 52.03% down from the top edge, 14.68% from the left edge
@@ -985,6 +1193,13 @@ class rustDaVinci:
                 color_x = first_color_x + (column * column_spacing)
                 color_y = first_color_y + (row * row_spacing)
                 self.ctrl_color.append((color_x, color_y))
+                # Store color grid positions in settings for the test overlay
+                color_idx = row * 4 + column
+                self.settings.setValue(f"overlay_color_{color_idx}_x", color_x)
+                self.settings.setValue(f"overlay_color_{color_idx}_y", color_y)
+                
+        # Store total color count
+        self.settings.setValue("overlay_color_count", len(self.ctrl_color))
 
     def calculate_statistics(self):
         """Calculate what colors, how many pixels and lines for the painting
@@ -1170,23 +1385,51 @@ class rustDaVinci:
             self.parent.show()
         self.parent.activateWindow()
 
-    def choose_painting_controls(self, size, brush, color):
-        """Choose the paint controls"""
-        # Select brush type
+    def choose_painting_controls(self, size, brush, color_idx):
+        """Choose the paint controls
+        
+        Args:
+            size (int): Brush size (0: small (2), 1: medium (4), 2: large (6), etc.)
+            brush (int): Brush type index
+            color_idx (int): Color index in the palette grid (0-63)
+        """
+        self.parent.ui.log_TextEdit.append(f"Selecting controls: size={size}, brush={brush}, color={color_idx}")
+        QApplication.processEvents()
+        
+        # Log the actual color we're selecting for debugging
+        if color_idx < len(self.updated_palette):
+            rgb_color = self.updated_palette[color_idx] if color_idx < len(self.updated_palette) else "unknown"
+            hex_color = rgb_to_hex(rgb_color) if isinstance(rgb_color, tuple) else "unknown"
+            opacity_percent = 100
+            if color_idx % 4 == 1:
+                opacity_percent = 75
+            elif color_idx % 4 == 2:
+                opacity_percent = 50
+            elif color_idx % 4 == 3:
+                opacity_percent = 25
+            self.parent.ui.log_TextEdit.append(f"Color: {hex_color}, Opacity: {opacity_percent}%")
+            QApplication.processEvents()
+
+        # 1. Select brush type first
         if self.current_ctrl_brush != brush:
             self.current_ctrl_brush = brush
+            self.parent.ui.log_TextEdit.append("Selecting brush type")
+            QApplication.processEvents()
             self.click_pixel(self.ctrl_brush[brush])
             time.sleep(self.ctrl_area_delay)
 
-        # Set brush size (text input box)
-        # size 0: small (2), 1: medium (4), 2: large (6), etc.
-        # Convert size to appropriate text value
+        # 2. Set brush size (text input box)
         brush_size = str(2 + (size * 2)) if size >= 0 else "2"  # Default to 2
         if self.current_ctrl_size != size:
             self.current_ctrl_size = size
-            # Click the size text box
+            self.parent.ui.log_TextEdit.append(f"Setting brush size: {brush_size}")
+            QApplication.processEvents()
+            # Click to focus the size box
             self.click_pixel(self.ctrl_size[0])
             time.sleep(self.ctrl_area_delay)
+            # Select all existing text
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.1)
             # Type the brush size
             pyautogui.typewrite(brush_size)
             time.sleep(0.1)
@@ -1194,31 +1437,52 @@ class rustDaVinci:
             pyautogui.press("enter")
             time.sleep(self.ctrl_area_delay)
 
-        # Set opacity (text input box)
-        # Calculate opacity value based on color index
-        opacity_value = "100"  # Default opacity: 100%
-        if color % 4 == 1:
-            opacity_value = "75"
-        elif color % 4 == 2:
-            opacity_value = "50"
-        elif color % 4 == 3:
-            opacity_value = "25"
+        # 3. Set opacity (text input box)
+        # Convert color_idx to opacity percentage for Rust (25, 50, 75, 100)
+        opacity_percent = "1"  # Default opacity: 100%
+        if color_idx % 4 == 1:
+            opacity_percent = "0.75"
+        elif color_idx % 4 == 2:
+            opacity_percent = "0.5"
+        elif color_idx % 4 == 3:
+            opacity_percent = "0.25"
 
-        # Click the opacity text box
-        self.click_pixel(self.ctrl_opacity[0])
+        # Always set opacity to ensure it's correct
+        self.parent.ui.log_TextEdit.append(f"Setting opacity: {opacity_percent}%")
+        QApplication.processEvents()
+        
+        # Click to focus the opacity text box
+        self.click_pixel(self.ctrl_opacity[0]) 
         time.sleep(self.ctrl_area_delay)
-        # Type the opacity value
-        pyautogui.typewrite(opacity_value)
+        # Select all existing text
+        pyautogui.hotkey('ctrl', 'a')
+        time.sleep(0.1)
+        # Type the opacity percentage value (25, 50, 75, 100)
+        pyautogui.typewrite(opacity_percent)
         time.sleep(0.1)
         # Press Enter
         pyautogui.press("enter")
         time.sleep(self.ctrl_area_delay)
 
-        # Select the color from the grid
-        if self.current_ctrl_color != color:
-            self.current_ctrl_color = color
-            self.click_pixel(self.ctrl_color[color % 64])
-            time.sleep(self.ctrl_area_delay)
+        # 4. Select the color from the grid
+        if self.current_ctrl_color != color_idx:
+            self.current_ctrl_color = color_idx
+            
+            # Calculate the row and column in the color grid
+            row = (color_idx // 4)      # Integer division by 4 gives row (0-15)
+            column = (color_idx % 4)    # Modulo 4 gives column (0-3)
+            
+            # Calculate the actual index in self.ctrl_color array
+            grid_idx = (row * 4) + column
+            
+            if grid_idx < len(self.ctrl_color):
+                self.parent.ui.log_TextEdit.append(f"Selecting color at grid position: row={row}, column={column}")
+                QApplication.processEvents()
+                self.click_pixel(self.ctrl_color[grid_idx])
+                time.sleep(self.ctrl_area_delay)
+            else:
+                self.parent.ui.log_TextEdit.append(f"Error: Invalid color grid index: {grid_idx}")
+                QApplication.processEvents()
 
     def update_skip_colors(self):
         """Updates the skip colors list"""
@@ -1523,15 +1787,22 @@ class rustDaVinci:
                             previous_progress_percent = progress_percent
                             self.parent.ui.progress_ProgressBar.setValue(progress_percent)
                             
-            # Update canvas after each color            
+            # Update canvas after each color using Ctrl+S instead of clicking update button           
             if update_canvas:
-                self.click_pixel(self.ctrl_update)
+                self.parent.ui.log_TextEdit.append("Updating canvas with Ctrl+S")
+                QApplication.processEvents()
+                pyautogui.hotkey('ctrl', 's')
+                time.sleep(self.ctrl_area_delay)
                 
             # Reset skip flag
             self.skip_current_color = False
 
+        # Update canvas at the end using Ctrl+S instead of clicking update button
         if update_canvas_end:
-            self.click_pixel(self.ctrl_update)
+            self.parent.ui.log_TextEdit.append("Final canvas update with Ctrl+S")
+            QApplication.processEvents()
+            pyautogui.hotkey('ctrl', 's')
+            time.sleep(self.ctrl_area_delay)
 
         return self.shutdown(listener, start_time)
     
@@ -1545,3 +1816,128 @@ class rustDaVinci:
         # In an actual implementation, this would contain all the original painting logic
         self.parent.ui.log_TextEdit.append("Using standard painting method...")
         return
+
+    def save_calculation_cache(self, image_path):
+        """Save the color calculation cache to a file alongside the image
+        
+        Args:
+            image_path (str): Path to the original image file
+        """
+        if not hasattr(self, 'layered_colors_map') or not self.layered_colors_map:
+            self.parent.ui.log_TextEdit.append("No calculation data to save.")
+            return False
+            
+        # Create the cache filename by adding .rustcache extension
+        cache_path = f"{image_path}.rustcache"
+        
+        try:
+            import pickle
+            import os
+            
+            # Data to cache
+            cache_data = {
+                'layered_colors_map': self.layered_colors_map,
+                'background_color': self.color_calculation_cache['background_color'],
+                'image_size': self.color_calculation_cache['resized_img'].size if self.color_calculation_cache['resized_img'] else None,
+                'timestamp': time.time(),
+                'version': 1.0  # For future compatibility checks
+            }
+            
+            # Save as pickle file
+            with open(cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+                
+            file_size = os.path.getsize(cache_path) / 1024  # Size in KB
+            self.parent.ui.log_TextEdit.append(f"Calculation cache saved ({file_size:.1f} KB): {os.path.basename(cache_path)}")
+            return True
+        except Exception as e:
+            self.parent.ui.log_TextEdit.append(f"Error saving calculation cache: {str(e)}")
+            return False
+
+    def load_calculation_cache(self, image_path, bg_color_rgb):
+        """Load color calculation cache from a file if it exists
+        
+        Args:
+            image_path (str): Path to the original image file
+            bg_color_rgb (tuple): RGB tuple of background color to match against cache
+            
+        Returns:
+            bool: True if cache was loaded successfully, False otherwise
+        """
+        # Create the expected cache filename
+        cache_path = f"{image_path}.rustcache"
+        
+        try:
+            import pickle
+            import os
+            
+            # Check if cache file exists
+            if not os.path.exists(cache_path):
+                return False
+                
+            # Load the cache data
+            with open(cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+                
+            # Verify the data is compatible
+            if 'version' not in cache_data or cache_data['version'] > 1.0:
+                self.parent.ui.log_TextEdit.append("Cached data format is not compatible")
+                return False
+                
+            # Check if background color matches
+            if cache_data['background_color'] != bg_color_rgb:
+                self.parent.ui.log_TextEdit.append("Background color in cache doesn't match current settings")
+                return False
+                
+            # Populate our cache
+            self.layered_colors_map = cache_data['layered_colors_map']
+            self.color_calculation_cache['background_color'] = cache_data['background_color']
+            
+            # Show cache age info
+            if 'timestamp' in cache_data:
+                import datetime
+                cache_time = datetime.datetime.fromtimestamp(cache_data['timestamp'])
+                current_time = datetime.datetime.now()
+                days_old = (current_time - cache_time).days
+                hours_old = int((current_time - cache_time).seconds / 3600)
+                
+                if days_old > 0:
+                    age_str = f"{days_old} day{'s' if days_old > 1 else ''}"
+                else:
+                    age_str = f"{hours_old} hour{'s' if hours_old > 1 else ''}"
+                    
+                self.parent.ui.log_TextEdit.append(f"Loaded calculation cache ({age_str} old)")
+            else:
+                self.parent.ui.log_TextEdit.append("Loaded calculation cache")
+                
+            return True
+        except Exception as e:
+            self.parent.ui.log_TextEdit.append(f"Error loading calculation cache: {str(e)}")
+            return False
+
+    def show_test_overlay(self):
+        """Show a test overlay that visualizes where the program thinks all UI elements are"""
+        try:
+            self.parent.ui.log_TextEdit.append("Launching test overlay...")
+            QApplication.processEvents()
+            
+            # Import the overlay module
+            import sys
+            import os
+            import subprocess
+            
+            # Build the path to the overlay script
+            overlay_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                                       "test", "overlay", "test_overlay.py")
+            
+            # Check if the file exists
+            if not os.path.exists(overlay_path):
+                self.parent.ui.log_TextEdit.append(f"Error: Overlay file not found at {overlay_path}")
+                return
+                
+            # Launch the overlay in a separate process
+            subprocess.Popen([sys.executable, overlay_path])
+            self.parent.ui.log_TextEdit.append("Test overlay launched. Press ESC to close it.")
+            
+        except Exception as e:
+            self.parent.ui.log_TextEdit.append(f"Error launching overlay: {str(e)}")

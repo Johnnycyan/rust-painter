@@ -13,6 +13,8 @@ from collections import defaultdict
 from lib.color_functions import hex_to_rgb, rgb_to_hex
 from lib.rustPaletteData import rust_palette
 
+# Global variable for cancellation support across processes
+_cancel_processing = False
 
 def alpha_blend(base_color, top_color, opacity):
     """
@@ -78,6 +80,11 @@ def find_optimal_layers(target_color, background_color, base_colors, opacity_lev
         list: A list of (color_index, opacity_index) tuples representing the layers
               from bottom to top
     """
+    # Check for cancellation
+    global _cancel_processing
+    if _cancel_processing:
+        return []
+    
     # Cache lookup for target color
     if color_cache is not None:
         key = (target_color, background_color)
@@ -163,6 +170,10 @@ def create_layered_colors_map(image, background_color, palette_colors, opacity_v
     Returns:
         dict: A dictionary mapping pixel coordinates to layers list
     """
+    # Reset cancellation flag
+    global _cancel_processing
+    _cancel_processing = False
+    
     width, height = image.size
     pixel_data = image.load()
     layered_colors = {}
@@ -206,6 +217,12 @@ def create_layered_colors_map(image, background_color, palette_colors, opacity_v
     bucket_processed = 0
     
     for bucket_key, colors in color_groups.items():
+        # Check for cancellation
+        if _cancel_processing:
+            if update_callback:
+                update_callback(0, 0, 0)  # Reset progress
+            return {}  # Return empty result
+        
         # Use the average color in this bucket
         r_sum = g_sum = b_sum = 0
         for color in colors:
@@ -235,11 +252,18 @@ def create_layered_colors_map(image, background_color, palette_colors, opacity_v
             bucket_percent = int((bucket_processed / bucket_count) * 50)  # First 50% of progress
             elapsed = time.time() - start_time
             remaining = (elapsed / bucket_percent) * (100 - bucket_percent) if bucket_percent > 0 else 0
-            update_callback(bucket_percent, elapsed, remaining)
+            stop_processing = update_callback(bucket_percent, elapsed, remaining)
+            if stop_processing:
+                _cancel_processing = True
+                return {}  # Return empty result
     
     # Second pass - assign colors to pixels using the pre-calculated bucket values
     for y in range(height):
         for x in range(width):
+            # Check for cancellation periodically
+            if _cancel_processing:
+                return {}  # Return empty result
+                
             color = pixel_data[x, y]
             bucket_key = (color[0]//5, color[1]//5, color[2]//5)  # Match bucket size from above
             
@@ -284,7 +308,10 @@ def create_layered_colors_map(image, background_color, palette_colors, opacity_v
                 percent = 50 + int((processed_pixels / total_pixels) * 50)
                 elapsed = time.time() - start_time
                 remaining = (elapsed / percent) * (100 - percent) if percent > 0 else 0
-                update_callback(percent, elapsed, remaining)
+                stop_processing = update_callback(percent, elapsed, remaining)
+                if stop_processing:
+                    _cancel_processing = True
+                    return {}  # Return empty result
     
     return layered_colors
 
@@ -309,42 +336,308 @@ def simulate_layered_image(image, background_color, palette_colors, opacity_valu
     simulated = Image.new("RGB", (width, height), background_color)
     pixels = simulated.load()
     
-    # Apply each pixel's layers
+    # First, fill all pixels with background color
+    for y in range(height):
+        for x in range(width):
+            pixels[x, y] = background_color
+    
+    # Apply each pixel's layers - ensure no pixels are left uncolored
     for (x, y), layers in layered_colors.items():
+        if not layers:
+            continue
+            
         current_color = background_color
         
         # Apply each layer
         for color_idx, opacity_idx in layers:
-            color = palette_colors[color_idx]
-            opacity = opacity_values[opacity_idx]
-            current_color = alpha_blend(current_color, color, opacity)
-        
-        pixels[x, y] = current_color
+            if color_idx < len(palette_colors) and opacity_idx < len(opacity_values):
+                color = palette_colors[color_idx]
+                opacity = opacity_values[opacity_idx]
+                current_color = alpha_blend(current_color, color, opacity)
+            
+        # Only set the pixel if we've calculated a valid color
+        # This prevents white speckling
+        if current_color != (0, 0, 0) or background_color == (0, 0, 0):
+            pixels[x, y] = current_color
     
     return simulated
 
 
-# Optional: Add multithreading support for even faster processing on multi-core systems
-try:
-    import multiprocessing
-    from functools import partial
+# These functions need to be at module level for multiprocessing to work
+def _process_color_chunk(chunk_data):
+    """Process a chunk of colors for multiprocessing"""
+    # Unpack the arguments from the tuple
+    bucket_items, background_color, palette_colors, opacity_values, max_layers = chunk_data
     
-    def _process_color_chunk(chunk_data, background_color, palette_colors, opacity_values, max_layers, color_cache):
-        """Process a chunk of colors for multiprocessing"""
-        results = {}
-        for color in chunk_data:
-            results[color] = find_optimal_layers(
-                color, background_color, palette_colors, opacity_values, max_layers, color_cache
-            )
-        return results
+    # Check for cancellation
+    global _cancel_processing
+    if _cancel_processing:
+        return {}
     
-    def create_layered_colors_map_parallel(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
-        """Parallel version of create_layered_colors_map using multiprocessing"""
-        # Similar implementation but with parallel processing for color calculations
-        # This would only be used if multiprocessing is available and beneficial
-        # Implementation details omitted for brevity - would follow similar pattern to the sequential version
-        pass
+    local_results = {}
+    local_cache = {}  # Local cache for this process
+    
+    for bucket_key, avg_color in bucket_items:
+        # Check for cancellation periodically
+        if _cancel_processing:
+            return {}
+            
+        local_results[bucket_key] = find_optimal_layers(
+            avg_color,
+            background_color,
+            palette_colors,
+            opacity_values,
+            max_layers,
+            local_cache
+        )
+    return local_results
+
+def _process_image_strip(strip_data):
+    """Process an image strip for multiprocessing"""
+    # Unpack the arguments from the tuple
+    strip_bounds, image_data, width, height, bucket_layers, background_color, palette_colors, opacity_values, max_layers = strip_data
+    
+    # Check for cancellation
+    global _cancel_processing
+    if _cancel_processing:
+        return {}
+    
+    local_results = {}
+    local_cache = {}  # Local cache for this process
+    start_x, end_x, start_y, end_y = strip_bounds
+    
+    for y in range(start_y, end_y):
+        for x in range(start_x, end_x):
+            # Check for cancellation periodically
+            if _cancel_processing:
+                return {}
+                
+            # Get pixel color from the serialized image data
+            if 0 <= x < width and 0 <= y < height:
+                color = image_data[y * width + x]
+                
+                bucket_key = (color[0]//5, color[1]//5, color[2]//5)
+                
+                # Get layers from bucket or calculate directly
+                layers = bucket_layers.get(bucket_key, [])
+                
+                # Check if this is an important pixel (high contrast area)
+                is_important_pixel = False
+                if x > 0 and y > 0 and x < width-1 and y < height-1:
+                    neighbors = []
+                    # Get the four surrounding pixels
+                    if x > 0:
+                        neighbors.append(image_data[y * width + (x-1)])
+                    if x < width-1:
+                        neighbors.append(image_data[y * width + (x+1)])
+                    if y > 0:
+                        neighbors.append(image_data[(y-1) * width + x])
+                    if y < height-1:
+                        neighbors.append(image_data[(y+1) * width + x])
+                    
+                    for neighbor in neighbors:
+                        if color_distance(color, neighbor) > 30:
+                            is_important_pixel = True
+                            break
+                
+                # For important pixels, calculate exact layers
+                if is_important_pixel:
+                    layers = find_optimal_layers(
+                        color,
+                        background_color,
+                        palette_colors,
+                        opacity_values,
+                        max_layers,
+                        local_cache
+                    )
+                
+                if layers:  # Only store pixels that need painting
+                    local_results[(x, y)] = layers
+    
+    return local_results
+
+def set_cancel_flag(cancel=True):
+    """Set the global cancellation flag that all processes will check"""
+    global _cancel_processing
+    _cancel_processing = cancel
+    print(f"Cancellation flag set to: {_cancel_processing}")
+
+def create_layered_colors_map_parallel(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
+    """Parallel version of create_layered_colors_map using multiprocessing"""
+    # Reset cancellation flag at the start
+    global _cancel_processing
+    _cancel_processing = False
+    
+    # First check if multiprocessing is available
+    try:
+        import multiprocessing
+    except ImportError:
+        print("Multiprocessing module not available, falling back to single-threaded mode")
+        if update_callback:
+            update_callback(5, 0, 0)  # Update with low progress to show we tried
+        return create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
+    
+    # Print confirmation that we're using multiprocessing
+    print(f"Using multiprocessing with {multiprocessing.cpu_count()} cores")
+    
+    width, height = image.size
+    pixel_data = image.load()
+    layered_colors = {}
+    
+    # Convert PixelAccess object to a serializable format (list of RGB tuples)
+    # This is needed because PixelAccess objects cannot be pickled
+    serialized_pixel_data = []
+    for y in range(height):
+        for x in range(width):
+            serialized_pixel_data.append(pixel_data[x, y])
+    
+    # Performance metrics
+    total_pixels = width * height
+    start_time = time.time()
+    
+    # First pass - identify unique colors
+    unique_colors = set()
+    
+    # Use downsampling for large images to reduce computation time
+    downsample = max(1, min(width, height) // 800)
+    downsample_active = total_pixels > 200000
+    
+    for y in range(0, height, 1 + (downsample if downsample_active else 0)):
+        for x in range(0, width, 1 + (downsample if downsample_active else 0)):
+            unique_colors.add(pixel_data[x, y])
+    
+    # Create color buckets (group similar colors)
+    color_groups = defaultdict(list)
+    for color in unique_colors:
+        bucket_key = (color[0]//5, color[1]//5, color[2]//5)
+        color_groups[bucket_key].append(color)
         
-except ImportError:
-    # Multiprocessing not available, fall back to single-threaded version
-    pass
+    # Calculate average colors for each bucket
+    avg_colors = {}
+    for bucket_key, colors in color_groups.items():
+        r_sum = g_sum = b_sum = 0
+        for color in colors:
+            r_sum += color[0]
+            g_sum += color[1]
+            b_sum += color[2]
+        avg_colors[bucket_key] = (
+            int(r_sum / len(colors)),
+            int(g_sum / len(colors)),
+            int(b_sum / len(colors))
+        )
+    
+    # Prepare data for parallel processing
+    # Split buckets into chunks for parallel processing
+    num_cores = min(multiprocessing.cpu_count(), 16)  # Limit to reasonable number
+    bucket_items = list(avg_colors.items())
+    chunk_size = max(1, len(bucket_items) // num_cores)
+    chunks = [bucket_items[i:i + chunk_size] for i in range(0, len(bucket_items), chunk_size)]
+    
+    # Phase 1: Process color buckets in parallel
+    bucket_layers = {}
+    pool = None
+    
+    try:
+        # Create process pool
+        pool = multiprocessing.Pool(processes=num_cores)
+        
+        # Prepare arguments for each chunk
+        chunk_args = [(chunk, background_color, palette_colors, opacity_values, max_layers) for chunk in chunks]
+        
+        # Map function to chunks using a list to avoid lazy evaluation
+        results = list(pool.imap_unordered(_process_color_chunk, chunk_args))
+        
+        # Check if processing was cancelled
+        if _cancel_processing:
+            if pool:
+                pool.terminate()
+                pool.join()
+            if update_callback:
+                update_callback(0, 0, 0)  # Reset progress
+            print("Processing was cancelled")
+            return {}
+            
+        # Combine results from all processes
+        for result in results:
+            bucket_layers.update(result)
+        
+        # Update progress
+        if update_callback:
+            elapsed = time.time() - start_time
+            update_callback(50, elapsed, elapsed)  # First phase complete
+            
+    except Exception as e:
+        print(f"Error in multiprocessing phase 1: {str(e)}")
+        if pool:
+            pool.terminate()
+            pool.join()
+        if update_callback:
+            update_callback(25, time.time() - start_time, 0)
+        return create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
+    
+    # Phase 2: Process pixels using pre-calculated bucket values
+    # Split image into horizontal strips for parallel processing
+    strip_height = max(1, height // num_cores)
+    strips = [(0, width, y, min(y + strip_height, height)) 
+             for y in range(0, height, strip_height)]
+    
+    try:
+        # Create a fresh pool
+        if pool:
+            pool.close()
+            pool.join()
+        pool = multiprocessing.Pool(processes=num_cores)
+        
+        # Prepare arguments for each strip - use serialized pixel data instead of PixelAccess
+        strip_args = [
+            (strip, serialized_pixel_data, width, height, bucket_layers, 
+             background_color, palette_colors, opacity_values, max_layers)
+            for strip in strips
+        ]
+        
+        # Track progress
+        strips_processed = 0
+        
+        # Process strips in parallel
+        for result in pool.imap_unordered(_process_image_strip, strip_args):
+            # Check for cancellation
+            if _cancel_processing:
+                if pool:
+                    pool.terminate()
+                    pool.join()
+                print("Processing was cancelled")
+                return {}
+                
+            layered_colors.update(result)
+            
+            # Update progress
+            strips_processed += 1
+            if update_callback:
+                percent = 50 + int((strips_processed / len(strips)) * 50)
+                elapsed = time.time() - start_time
+                remaining = (elapsed / percent) * (100 - percent) if percent > 0 else 0
+                stop_processing = update_callback(percent, elapsed, remaining)
+                if stop_processing:
+                    _cancel_processing = True
+                    if pool:
+                        pool.terminate()
+                        pool.join()
+                    return {}
+        
+    except Exception as e:
+        print(f"Error in multiprocessing phase 2: {str(e)}")
+        if pool:
+            pool.terminate()
+            pool.join()
+        # If we got some results already, return them, otherwise fall back
+        if len(layered_colors) < 10:
+            if update_callback:
+                update_callback(75, time.time() - start_time, 0)
+            return create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
+    finally:
+        # Always make sure the pool is properly closed
+        if pool:
+            pool.close()
+            pool.join()
+    
+    return layered_colors
