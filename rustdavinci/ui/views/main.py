@@ -53,7 +53,6 @@ class MainWindow(QMainWindow):
         identifyMenu.addAction("Manually", self.locate_ctrl_manually_clicked)
         identifyMenu.addAction("Automatically", self.locate_ctrl_automatically_clicked)
         identifyMenu.addSeparator()
-        identifyMenu.addAction("Show UI Test Overlay", self.show_test_overlay_clicked)
         self.ui.identify_ctrl_PushButton.setMenu(identifyMenu)
 
         self.ui.paint_image_PushButton.clicked.connect(self.paint_image_clicked)
@@ -191,10 +190,6 @@ class MainWindow(QMainWindow):
         self.show_normal_PushButton.hide()
         self.show_high_PushButton.hide()
         self.expand_window()
-
-    def show_test_overlay_clicked(self):
-        """Launch the test overlay to show UI element positions"""
-        self.rustDaVinci.show_test_overlay()
 
     def show(self):
         """Show the main window"""
