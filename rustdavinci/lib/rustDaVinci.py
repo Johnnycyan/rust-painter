@@ -1298,13 +1298,49 @@ class rustDaVinci:
                 pyautogui.click(x, y)
 
     def draw_line(self, point_A, point_B):
-        """Draws a line between point_A and point_B."""
+        """Draws a horizontal line between point_A and point_B.
+        Optimized for painting speed and accuracy by using the shift key method.
+        This method should be used for horizontal lines where point_A and point_B have the same y-coordinate.
+        """
+        # Quick check if it's actually a horizontal line
+        if abs(point_A[1] - point_B[1]) > 2:
+            # If it's more vertical than horizontal, use the vertical line drawing
+            if abs(point_A[0] - point_B[0]) < abs(point_A[1] - point_B[1]):
+                return self.draw_vertical_line(point_A, point_B)
+
+        # Apply optimized line delay for horizontal drawing
         pyautogui.PAUSE = self.line_delay
+        
+        # Draw the horizontal line using the shift key
         pyautogui.mouseDown(button="left", x=point_A[0], y=point_A[1])
         pyautogui.keyDown("shift")
         pyautogui.moveTo(point_B[0], point_B[1])
         pyautogui.keyUp("shift")
         pyautogui.mouseUp(button="left")
+        
+        # Restore normal click delay
+        pyautogui.PAUSE = self.click_delay
+
+    def draw_vertical_line(self, point_A, point_B):
+        """Draws a vertical line between point_A and point_B.
+        Optimized for painting vertical lines where point_A and point_B have the same x-coordinate.
+        This provides significant speed improvements for vertical shapes and patterns.
+        """
+        # Make sure points are ordered from top to bottom
+        if point_A[1] > point_B[1]:
+            point_A, point_B = point_B, point_A
+            
+        # Apply optimized line delay for vertical drawing
+        pyautogui.PAUSE = self.line_delay
+        
+        # Draw the vertical line using the shift key
+        pyautogui.mouseDown(button="left", x=point_A[0], y=point_A[1])
+        pyautogui.keyDown("shift")
+        pyautogui.moveTo(point_A[0], point_B[1])
+        pyautogui.keyUp("shift")
+        pyautogui.mouseUp(button="left")
+        
+        # Restore normal click delay
         pyautogui.PAUSE = self.click_delay
 
     def key_event(self, key):
@@ -1606,22 +1642,47 @@ class rustDaVinci:
                     color_counts[color_key] += 1
                 total_operations += 1
         
-        # Estimate time (simplified)
+        # Precompute the horizontal and vertical lines to optimize painting
+        self.parent.ui.log_TextEdit.append("Optimizing painting with line detection...")
+        QApplication.processEvents()
+        precomputed_lines = self.precompute_painting_lines(color_counts)
+                
+        # Recalculate operations and time estimate based on the optimizations
+        total_operations = 0
+        for color_key in precomputed_lines:
+            # Each horizontal line is one operation
+            total_operations += len(precomputed_lines[color_key]['h_lines'])
+            # Each vertical line is one operation
+            total_operations += len(precomputed_lines[color_key]['v_lines'])
+            # Each point is one operation
+            total_operations += len(precomputed_lines[color_key]['points'])
+        
+        # Add color selection operations
+        total_operations += len(precomputed_lines)
+        
+        # Estimate time with optimized operations
         one_click_time = self.click_delay + 0.001
         one_click_time = one_click_time * 2 if self.use_double_click else one_click_time
-        set_paint_controls_time = len(color_counts) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
-        self.estimated_time = int((total_operations * one_click_time) + set_paint_controls_time)
+        one_line_time = (self.line_delay * 5) + 0.0035
+        set_paint_controls_time = len(precomputed_lines) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
+        
+        # Calculate time based on operations
+        h_v_lines_count = sum(len(data['h_lines']) + len(data['v_lines']) for data in precomputed_lines.values())
+        points_count = sum(len(data['points']) for data in precomputed_lines.values())
+        painting_time = (h_v_lines_count * one_line_time) + (points_count * one_click_time)
+        self.estimated_time = int(painting_time + set_paint_controls_time)
 
         # Print statistics
         question = (
             "Dimensions: \t\t\t\t" + str(self.canvas_w) + " x " + str(self.canvas_h)
         )
-        question += "\nNumber of unique colors/opacities:\t" + str(len(color_counts))
-        question += "\nTotal painting operations: \t\t" + str(total_operations)
+        question += "\nNumber of unique colors/opacities:\t" + str(len(precomputed_lines))
+        question += f"\nTotal horizontal/vertical lines: \t{h_v_lines_count}"
+        question += f"\nTotal individual points: \t\t{points_count}"
         question += "\nEst. painting time:\t\t\t" + str(
             time.strftime("%H:%M:%S", time.gmtime(self.estimated_time))
         )
-        question += "\n\nUsing optimal color layering for better accuracy."
+        question += "\n\nUsing optimal line painting for better speed and accuracy."
         question += "\nWould you like to start the painting?"
         
         if show_info:
@@ -1731,12 +1792,13 @@ class rustDaVinci:
         listener = keyboard.Listener(on_press=self.key_event)
         listener.start()
         
-        # We'll paint one color/opacity combination at a time for efficiency
-        current_color_idx = -1
-        current_opacity_idx = -1
-        
-        # Group pixels by color and opacity for more efficient painting
-        for color_key, count in sorted(color_counts.items(), key=lambda x: x[1], reverse=True):
+        # Paint each color/opacity combination using the precomputed lines
+        for color_key in sorted(precomputed_lines.keys(), key=lambda k: 
+                             len(precomputed_lines[k]['h_lines']) + 
+                             len(precomputed_lines[k]['v_lines']) + 
+                             len(precomputed_lines[k]['points']), 
+                             reverse=True):
+            
             color_idx, opacity_idx = color_key
             
             if self.abort:
@@ -1747,52 +1809,121 @@ class rustDaVinci:
                 self.skip_current_color = False
                 continue
                 
-            # Display current color info
+            # Get the color and opacity information
             color = self.base_palette_colors[color_idx]
             opacity = self.opacity_values[opacity_idx]
             opacity_percent = int(opacity * 100)
             color_hex = rgb_to_hex(color)
             
+            # Count operations for this color
+            lines_count = len(precomputed_lines[color_key]['h_lines']) + len(precomputed_lines[color_key]['v_lines'])
+            points_count = len(precomputed_lines[color_key]['points'])
+            
             self.parent.ui.log_TextEdit.append(
-                f"Painting color: {color_hex} at {opacity_percent}% opacity ({count} pixels)"
+                f"Painting {color_hex} at {opacity_percent}% opacity: " +
+                f"{lines_count} lines, {points_count} points"
             )
             QApplication.processEvents()
             
-            # Set painting controls for this color and opacity
-            # Pass the color index directly (0-63) without multiplying by 4
-            # The choose_painting_controls method will handle selecting the right color and setting opacity separately
+            # Set painting controls for this color/opacity
             self.choose_painting_controls(0, brush_type, color_idx, opacity_value=opacity)
             
-            # Paint all pixels with this color/opacity combination
-            for (x, y), layers in self.layered_colors_map.items():
-                # Check for current color/opacity in the layers of this pixel
-                for layer_color_idx, layer_opacity_idx in layers:
-                    if layer_color_idx == color_idx and layer_opacity_idx == opacity_idx:
-                        # Paint this pixel
-                        while self.paused:
-                            QApplication.processEvents()
-                            
-                        if self.abort:
-                            self.parent.ui.log_TextEdit.append("Aborted...")
-                            return self.shutdown(listener, start_time, 1)
-                            
-                        if self.skip_current_color:
-                            break
-                            
-                        # Calculate actual screen coordinates
-                        screen_x = self.canvas_x + x
-                        screen_y = self.canvas_y + y
-                        
-                        # Click to paint
-                        self.click_pixel(screen_x, screen_y)
-                        operation_counter += 1
-                        
-                        # Update progress
-                        progress_percent = int(operation_counter / total_operations * 100)
-                        if progress_percent != previous_progress_percent:
-                            previous_progress_percent = progress_percent
-                            self.parent.ui.progress_ProgressBar.setValue(progress_percent)
-                            
+            # First paint horizontal lines
+            for h_line in precomputed_lines[color_key]['h_lines']:
+                while self.paused:
+                    QApplication.processEvents()
+                    
+                if self.abort:
+                    self.parent.ui.log_TextEdit.append("Aborted...")
+                    return self.shutdown(listener, start_time, 1)
+                    
+                if self.skip_current_color:
+                    break
+                
+                # Extract line coordinates
+                start_x, y, end_x = h_line
+                
+                # Calculate actual screen coordinates
+                screen_start_x = self.canvas_x + start_x
+                screen_end_x = self.canvas_x + end_x
+                screen_y = self.canvas_y + y
+                
+                # Draw the horizontal line
+                self.draw_line((screen_start_x, screen_y), (screen_end_x, screen_y))
+                operation_counter += 1
+                
+                # Update progress
+                progress_percent = int(operation_counter / total_operations * 100)
+                if progress_percent != previous_progress_percent:
+                    previous_progress_percent = progress_percent
+                    self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+            
+            # Reset skip flag if it was set during horizontal lines
+            if self.skip_current_color:
+                self.skip_current_color = False
+                continue
+            
+            # Next paint vertical lines
+            for v_line in precomputed_lines[color_key]['v_lines']:
+                while self.paused:
+                    QApplication.processEvents()
+                    
+                if self.abort:
+                    self.parent.ui.log_TextEdit.append("Aborted...")
+                    return self.shutdown(listener, start_time, 1)
+                    
+                if self.skip_current_color:
+                    break
+                
+                # Extract line coordinates
+                x, start_y, end_y = v_line
+                
+                # Calculate actual screen coordinates
+                screen_x = self.canvas_x + x
+                screen_start_y = self.canvas_y + start_y
+                screen_end_y = self.canvas_y + end_y
+                
+                # Draw the vertical line
+                self.draw_vertical_line((screen_x, screen_start_y), (screen_x, screen_end_y))
+                operation_counter += 1
+                
+                # Update progress
+                progress_percent = int(operation_counter / total_operations * 100)
+                if progress_percent != previous_progress_percent:
+                    previous_progress_percent = progress_percent
+                    self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+            
+            # Reset skip flag if it was set during vertical lines
+            if self.skip_current_color:
+                self.skip_current_color = False
+                continue
+            
+            # Finally paint individual points
+            for point in precomputed_lines[color_key]['points']:
+                while self.paused:
+                    QApplication.processEvents()
+                    
+                if self.abort:
+                    self.parent.ui.log_TextEdit.append("Aborted...")
+                    return self.shutdown(listener, start_time, 1)
+                    
+                if self.skip_current_color:
+                    break
+                
+                # Calculate actual screen coordinates
+                screen_x = self.canvas_x + point[0]
+                screen_y = self.canvas_y + point[1]
+                
+                # Paint the individual point
+                self.click_pixel(screen_x, screen_y)
+                operation_counter += 1
+                
+                # Update progress
+                progress_percent = int(operation_counter / total_operations * 100)
+                if progress_percent != previous_progress_percent:
+                    previous_progress_percent = progress_percent
+                    self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+            
             # Update canvas after each color using Ctrl+S instead of clicking update button           
             if update_canvas:
                 self.parent.ui.log_TextEdit.append("Updating canvas with Ctrl+S")
@@ -1811,7 +1942,7 @@ class rustDaVinci:
             time.sleep(self.ctrl_area_delay)
 
         return self.shutdown(listener, start_time)
-    
+
     def start_standard_painting(self):
         """Original painting method when optimal layering is not available"""
         # ...existing code from original start_painting method...
@@ -1921,29 +2052,153 @@ class rustDaVinci:
             self.parent.ui.log_TextEdit.append(f"Error loading calculation cache: {str(e)}")
             return False
 
-    def show_test_overlay(self):
-        """Show a test overlay that visualizes where the program thinks all UI elements are"""
-        try:
-            self.parent.ui.log_TextEdit.append("Launching test overlay...")
-            QApplication.processEvents()
+    def precompute_painting_lines(self, color_opacity_map):
+        """
+        Precompute horizontal and vertical lines for each color/opacity combination.
+        This optimization dramatically reduces painting time by using line drawing instead of individual clicks.
+        
+        Args:
+            color_opacity_map: Dictionary with (color_idx, opacity_idx) keys and pixel counts as values
             
-            # Import the overlay module
-            import sys
-            import os
-            import subprocess
-            
-            # Build the path to the overlay script
-            overlay_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                                       "test", "overlay", "test_overlay.py")
-            
-            # Check if the file exists
-            if not os.path.exists(overlay_path):
-                self.parent.ui.log_TextEdit.append(f"Error: Overlay file not found at {overlay_path}")
-                return
+        Returns:
+            Dictionary containing precomputed line data for each color/opacity combination
+        """
+        self.parent.ui.log_TextEdit.append("Optimizing painting process - detecting line segments...")
+        QApplication.processEvents()
+        
+        # Create a dictionary to store:
+        # (color_idx, opacity_idx) -> { 'h_lines': [...], 'v_lines': [...], 'points': [...] }
+        precomputed_lines = {}
+        
+        # Create a temporary 2D grid representing the image to track processed pixels
+        grid = {}
+        min_line_width = int(self.settings.value("minimum_line_width", default_settings["minimum_line_width"]))
+        
+        # Fill the grid with color/opacity information
+        for (x, y), layers in self.layered_colors_map.items():
+            for color_idx, opacity_idx in layers:
+                if (x, y) not in grid:
+                    grid[(x, y)] = []
+                grid[(x, y)].append((color_idx, opacity_idx))
+        
+        # For each color/opacity combination, find horizontal and vertical lines
+        for (color_idx, opacity_idx), count in color_opacity_map.items():
+            # Skip if very few pixels (not worth the effort)
+            if count < min_line_width:
+                continue
                 
-            # Launch the overlay in a separate process
-            subprocess.Popen([sys.executable, overlay_path])
-            self.parent.ui.log_TextEdit.append("Test overlay launched. Press ESC to close it.")
+            # Initialize storage for this color/opacity combination
+            if (color_idx, opacity_idx) not in precomputed_lines:
+                precomputed_lines[(color_idx, opacity_idx)] = {
+                    'h_lines': [],  # Horizontal lines: [(start_x, y, end_x), ...]
+                    'v_lines': [],  # Vertical lines: [(x, start_y, end_y), ...]
+                    'points': []    # Individual points: [(x, y), ...]
+                }
+                
+            # Track which pixels we've already processed for this color/opacity
+            processed = set()
             
-        except Exception as e:
-            self.parent.ui.log_TextEdit.append(f"Error launching overlay: {str(e)}")
+            # First pass: Find horizontal lines
+            for y in range(self.canvas_h):
+                x = 0
+                while x < self.canvas_w:
+                    # Find start of horizontal line
+                    line_start = None
+                    while x < self.canvas_w:
+                        if ((x, y) in grid and 
+                            (color_idx, opacity_idx) in grid[(x, y)] and
+                            (x, y) not in processed):
+                            line_start = x
+                            break
+                        x += 1
+                        
+                    # No line found, move to next row
+                    if line_start is None:
+                        break
+                        
+                    # Find end of horizontal line
+                    line_end = line_start
+                    x = line_start + 1
+                    while x < self.canvas_w:
+                        if ((x, y) in grid and 
+                            (color_idx, opacity_idx) in grid[(x, y)] and
+                            (x, y) not in processed):
+                            line_end = x
+                            x += 1
+                        else:
+                            break
+                    
+                    # Check if line is long enough
+                    line_length = line_end - line_start + 1
+                    if line_length >= min_line_width:
+                        # Store the horizontal line
+                        precomputed_lines[(color_idx, opacity_idx)]['h_lines'].append(
+                            (line_start, y, line_end)
+                        )
+                        # Mark all pixels in this line as processed
+                        for i in range(line_start, line_end + 1):
+                            processed.add((i, y))
+                    else:
+                        # Line too short, just increment x to look for the next line
+                        x = line_end + 1
+            
+            # Second pass: Find vertical lines
+            for x in range(self.canvas_w):
+                y = 0
+                while y < self.canvas_h:
+                    # Find start of vertical line
+                    line_start = None
+                    while y < self.canvas_h:
+                        if ((x, y) in grid and 
+                            (color_idx, opacity_idx) in grid[(x, y)] and
+                            (x, y) not in processed):
+                            line_start = y
+                            break
+                        y += 1
+                        
+                    # No line found, move to next column
+                    if line_start is None:
+                        break
+                    
+                    # Find end of vertical line
+                    line_end = line_start
+                    y = line_start + 1
+                    while y < self.canvas_h:
+                        if ((x, y) in grid and 
+                            (color_idx, opacity_idx) in grid[(x, y)] and
+                            (x, y) not in processed):
+                            line_end = y
+                            y += 1
+                        else:
+                            break
+                    
+                    # Check if line is long enough
+                    line_length = line_end - line_start + 1
+                    if line_length >= min_line_width:
+                        # Store the vertical line
+                        precomputed_lines[(color_idx, opacity_idx)]['v_lines'].append(
+                            (x, line_start, line_end)
+                        )
+                        # Mark all pixels in this line as processed
+                        for i in range(line_start, line_end + 1):
+                            processed.add((x, i))
+                    else:
+                        # Line too short, just increment y to look for the next line
+                        y = line_end + 1
+                        
+            # Final pass: Store remaining unprocessed pixels as individual points
+            for (x, y), layers in self.layered_colors_map.items():
+                if ((color_idx, opacity_idx) in layers and (x, y) not in processed):
+                    precomputed_lines[(color_idx, opacity_idx)]['points'].append((x, y))
+        
+        # Print statistics
+        total_horizontal_lines = sum(len(data['h_lines']) for data in precomputed_lines.values())
+        total_vertical_lines = sum(len(data['v_lines']) for data in precomputed_lines.values())
+        total_points = sum(len(data['points']) for data in precomputed_lines.values())
+        
+        self.parent.ui.log_TextEdit.append(
+            f"Optimization complete: {total_horizontal_lines} horizontal lines, " +
+            f"{total_vertical_lines} vertical lines, {total_points} individual points"
+        )
+        
+        return precomputed_lines
