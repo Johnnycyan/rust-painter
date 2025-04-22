@@ -77,7 +77,7 @@ class rustDaVinci:
         self.ctrl_color = []
         self.current_ctrl_size = None
         self.current_ctrl_brush = None
-        self.current_ctrl_opacity = None
+        self.current_ctrl_opacity = None  # Track actual opacity value
         self.current_ctrl_color = None
 
         # Canvas coordinates/ ratio
@@ -1359,7 +1359,20 @@ class rustDaVinci:
             color_idx (int): Color index in the palette grid (0-63)
             opacity_value (float, optional): If provided, directly set this opacity value (0-1)
         """
-        self.parent.ui.log_TextEdit.append(f"Selecting controls: size={size}, brush={brush}, color={color_idx}")
+        # Determine actual opacity value for tracking purposes
+        actual_opacity = opacity_value
+        if opacity_value is None:
+            # Default opacities based on column
+            actual_opacity = 1.0  # Default opacity: 100%
+            if color_idx % 4 == 1:
+                actual_opacity = 0.75
+            elif color_idx % 4 == 2:
+                actual_opacity = 0.5
+            elif color_idx % 4 == 3:
+                actual_opacity = 0.25
+        
+        # Log information about what we're doing
+        self.parent.ui.log_TextEdit.append("Setting up painting controls...")
         QApplication.processEvents()
         
         # Longer delay for control area interactions
@@ -1370,23 +1383,12 @@ class rustDaVinci:
             rgb_color = self.updated_palette[color_idx] if color_idx < len(self.updated_palette) else "unknown"
             hex_color = rgb_to_hex(rgb_color) if isinstance(rgb_color, tuple) else "unknown"
             
-            # Determine opacity percentage
-            if opacity_value is not None:
-                opacity_percent = int(opacity_value * 100)
-            else:
-                # Default opacities based on column (for backward compatibility)
-                opacity_percent = 100
-                if color_idx % 4 == 1:
-                    opacity_percent = 75
-                elif color_idx % 4 == 2:
-                    opacity_percent = 50
-                elif color_idx % 4 == 3:
-                    opacity_percent = 25
-                    
-            self.parent.ui.log_TextEdit.append(f"Color: {hex_color}, Opacity: {opacity_percent}%")
+            # Determine opacity percentage for display
+            opacity_percent = int(actual_opacity * 100)
+            self.parent.ui.log_TextEdit.append(f"Target color: {hex_color}, Opacity: {opacity_percent}%")
             QApplication.processEvents()
 
-        # 1. Select brush type first - always double click
+        # 1. Select brush type first - only if changed
         if self.current_ctrl_brush != brush:
             self.current_ctrl_brush = brush
             self.parent.ui.log_TextEdit.append("Selecting brush type")
@@ -1396,8 +1398,11 @@ class rustDaVinci:
             time.sleep(0.1)  # Short delay between clicks
             pyautogui.click(self.ctrl_brush[brush][0], self.ctrl_brush[brush][1])
             time.sleep(ctrl_interaction_delay)
+        else:
+            self.parent.ui.log_TextEdit.append("Brush type already set correctly - no change needed")
+            QApplication.processEvents()
 
-        # 2. Set brush size (text input box)
+        # 2. Set brush size (text input box) - only if changed
         brush_size = str(1 + (size * 2)) if size >= 0 else "1"  # Default to 1
         if self.current_ctrl_size != size:
             self.current_ctrl_size = size
@@ -1421,51 +1426,49 @@ class rustDaVinci:
             # Press Enter
             pyautogui.press("enter")
             time.sleep(ctrl_interaction_delay)
-
-        # 3. Set opacity (text input box)
-        # Determine opacity value string
-        if opacity_value is not None:
-            # Use provided opacity value
-            if opacity_value == 0.75:
-                opacity_value = 0.37
-            elif opacity_value == 0.5:
-                opacity_value = 0.25
-            elif opacity_value == 0.25:
-                opacity_value = 0.12
-            opacity_percent = str(opacity_value)
         else:
-            # Default opacity based on color index column
-            opacity_percent = "1"  # Default opacity: 100%
-            if color_idx % 4 == 1:
-                opacity_percent = "0.75"
-            elif color_idx % 4 == 2:
-                opacity_percent = "0.5"
-            elif color_idx % 4 == 3:
-                opacity_percent = "0.25"
+            self.parent.ui.log_TextEdit.append(f"Brush size already set to {brush_size} - no change needed")
+            QApplication.processEvents()
 
-        # Always set opacity to ensure it's correct
-        self.parent.ui.log_TextEdit.append(f"Setting opacity: {opacity_percent}")
-        QApplication.processEvents()
+        # 3. Set opacity (text input box) - only if changed
+        # Determine opacity value string for UI input
+        ui_opacity_value = actual_opacity
+        if actual_opacity == 0.75:
+            ui_opacity_value = 0.37
+        elif actual_opacity == 0.5:
+            ui_opacity_value = 0.25
+        elif actual_opacity == 0.25:
+            ui_opacity_value = 0.12
+        opacity_percent = str(ui_opacity_value)
         
-        # Double click to focus the opacity text box
-        pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
-        time.sleep(0.1)  # Short delay between clicks
-        pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
-        time.sleep(ctrl_interaction_delay)
-        
-        # Select all existing text
-        pyautogui.hotkey('ctrl', 'a')
-        time.sleep(0.2)  # Longer delay after Ctrl+A
-        
-        # Type the opacity percentage value
-        pyautogui.typewrite(opacity_percent)
-        time.sleep(0.2)  # Longer delay after typing
-        
-        # Press Enter
-        pyautogui.press("enter")
-        time.sleep(ctrl_interaction_delay)
+        # Only update opacity if it changed
+        if self.current_ctrl_opacity != actual_opacity:
+            self.current_ctrl_opacity = actual_opacity
+            self.parent.ui.log_TextEdit.append(f"Setting opacity: {int(actual_opacity * 100)}%")
+            QApplication.processEvents()
+            
+            # Double click to focus the opacity text box
+            pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
+            time.sleep(0.1)  # Short delay between clicks
+            pyautogui.click(self.ctrl_opacity[0][0], self.ctrl_opacity[0][1])
+            time.sleep(ctrl_interaction_delay)
+            
+            # Select all existing text
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.2)  # Longer delay after Ctrl+A
+            
+            # Type the opacity percentage value
+            pyautogui.typewrite(opacity_percent)
+            time.sleep(0.2)  # Longer delay after typing
+            
+            # Press Enter
+            pyautogui.press("enter")
+            time.sleep(ctrl_interaction_delay)
+        else:
+            self.parent.ui.log_TextEdit.append(f"Opacity already set to {int(actual_opacity * 100)}% - no change needed")
+            QApplication.processEvents()
 
-        # 4. Select the color from the grid - always double click
+        # 4. Select the color from the grid - only if changed
         if self.current_ctrl_color != color_idx:
             self.current_ctrl_color = color_idx
             
@@ -1488,6 +1491,9 @@ class rustDaVinci:
             else:
                 self.parent.ui.log_TextEdit.append(f"Error: Invalid color grid index: {grid_idx}")
                 QApplication.processEvents()
+        else:
+            self.parent.ui.log_TextEdit.append(f"Color already selected - no change needed")
+            QApplication.processEvents()
 
     def update_skip_colors(self):
         """Updates the skip colors list"""
@@ -1663,9 +1669,9 @@ class rustDaVinci:
         bg_color_hex = self.settings.value("background_color", default_settings["background_color"])
         bg_color_rgb = hex_to_rgb(bg_color_hex)
         
-        self.click_pixel(self.ctrl_size[0])  # To set focus on the rust window
-        time.sleep(0.5)
-        self.click_pixel(self.ctrl_size[0])
+        self.click_pixel(self.ctrl_size[0] - (0, 10)) # To set focus on the rust window
+        time.sleep(1)
+        self.click_pixel(self.ctrl_size[0] - (0, 10))
         
         if bool(self.settings.value("paint_background", default_settings["paint_background"])):
             self.parent.ui.log_TextEdit.append("Painting background...")
