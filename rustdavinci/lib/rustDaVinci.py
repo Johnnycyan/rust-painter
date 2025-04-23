@@ -1343,6 +1343,28 @@ class rustDaVinci:
         # Restore normal click delay
         pyautogui.PAUSE = self.click_delay
 
+    def draw_diagonal_line(self, start_point, end_point):
+        """Draws a diagonal line between start_point and end_point.
+        This provides efficient painting for diagonal shapes and patterns.
+        
+        Args:
+            start_point: Tuple (x, y) for the start of the line
+            end_point: Tuple (x, y) for the end of the line
+        """
+        # Apply optimized line delay for diagonal drawing
+        pyautogui.PAUSE = self.line_delay
+        
+        # Draw the diagonal line using the shift key method
+        # This works the same way as horizontal/vertical lines in Rust
+        pyautogui.mouseDown(button="left", x=start_point[0], y=start_point[1])
+        pyautogui.keyDown("shift")
+        pyautogui.moveTo(end_point[0], end_point[1])
+        pyautogui.keyUp("shift")
+        pyautogui.mouseUp(button="left")
+        
+        # Restore normal click delay
+        pyautogui.PAUSE = self.click_delay
+
     def key_event(self, key):
         """Key-press thread during painting."""
         try:
@@ -1645,7 +1667,7 @@ class rustDaVinci:
                     color_counts[color_key] += 1
                 total_operations += 1
         
-        # Precompute the horizontal and vertical lines to optimize painting
+        # Precompute the horizontal, vertical, and diagonal lines to optimize painting
         self.parent.ui.log_TextEdit.append("Optimizing painting with line detection...")
         QApplication.processEvents()
         precomputed_lines = self.precompute_painting_lines(color_counts)
@@ -1657,6 +1679,8 @@ class rustDaVinci:
             total_operations += len(precomputed_lines[color_key]['h_lines'])
             # Each vertical line is one operation
             total_operations += len(precomputed_lines[color_key]['v_lines'])
+            # Each diagonal line is one operation
+            total_operations += len(precomputed_lines[color_key]['d_lines'])
             # Each point is one operation
             total_operations += len(precomputed_lines[color_key]['points'])
         
@@ -1670,9 +1694,10 @@ class rustDaVinci:
         set_paint_controls_time = len(precomputed_lines) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
         
         # Calculate time based on operations
-        h_v_lines_count = sum(len(data['h_lines']) + len(data['v_lines']) for data in precomputed_lines.values())
+        h_v_d_lines_count = sum(len(data['h_lines']) + len(data['v_lines']) + len(data['d_lines']) 
+                              for data in precomputed_lines.values())
         points_count = sum(len(data['points']) for data in precomputed_lines.values())
-        painting_time = (h_v_lines_count * one_line_time) + (points_count * one_click_time)
+        painting_time = (h_v_d_lines_count * one_line_time) + (points_count * one_click_time)
         self.estimated_time = int(painting_time + set_paint_controls_time)
 
         # Print statistics
@@ -1680,7 +1705,7 @@ class rustDaVinci:
             "Dimensions: \t\t\t\t" + str(self.canvas_w) + " x " + str(self.canvas_h)
         )
         question += "\nNumber of unique colors/opacities:\t" + str(len(precomputed_lines))
-        question += f"\nTotal horizontal/vertical lines: \t{h_v_lines_count}"
+        question += f"\nTotal lines (h/v/diag): \t\t{h_v_d_lines_count}"
         question += f"\nTotal individual points: \t\t{points_count}"
         question += "\nEst. painting time:\t\t\t" + str(
             time.strftime("%H:%M:%S", time.gmtime(self.estimated_time))
@@ -1744,7 +1769,7 @@ class rustDaVinci:
             
             # Find the background color index in our base colors
             background_idx = -1
-            for i, color in self.base_palette_colors:
+            for i, color in enumerate(self.base_palette_colors):
                 if color == bg_color_rgb:
                     background_idx = i
                     break
@@ -1801,6 +1826,7 @@ class rustDaVinci:
         for color_key in sorted(precomputed_lines.keys(), key=lambda k: 
                              len(precomputed_lines[k]['h_lines']) + 
                              len(precomputed_lines[k]['v_lines']) + 
+                             len(precomputed_lines[k]['d_lines']) + 
                              len(precomputed_lines[k]['points']), 
                              reverse=True):
             
@@ -1821,12 +1847,17 @@ class rustDaVinci:
             color_hex = rgb_to_hex(color)
             
             # Count operations for this color
-            lines_count = len(precomputed_lines[color_key]['h_lines']) + len(precomputed_lines[color_key]['v_lines'])
+            h_lines_count = len(precomputed_lines[color_key]['h_lines'])
+            v_lines_count = len(precomputed_lines[color_key]['v_lines'])
+            d_lines_count = len(precomputed_lines[color_key]['d_lines'])
             points_count = len(precomputed_lines[color_key]['points'])
+            
+            total_ops = h_lines_count + v_lines_count + d_lines_count + points_count
             
             self.parent.ui.log_TextEdit.append(
                 f"Painting {color_hex} at {opacity_percent}% opacity: " +
-                f"{lines_count} lines, {points_count} points"
+                f"{h_lines_count} horizontal, {v_lines_count} vertical, " +
+                f"{d_lines_count} diagonal lines, {points_count} points"
             )
             QApplication.processEvents()
             
@@ -1899,6 +1930,43 @@ class rustDaVinci:
                     self.parent.ui.progress_ProgressBar.setValue(progress_percent)
             
             # Reset skip flag if it was set during vertical lines
+            if self.skip_current_color:
+                self.skip_current_color = False
+                continue
+                
+            # Now paint diagonal lines
+            for d_line in precomputed_lines[color_key]['d_lines']:
+                while self.paused:
+                    QApplication.processEvents()
+                    
+                if self.abort:
+                    self.parent.ui.log_TextEdit.append("Aborted...")
+                    return self.shutdown(listener, start_time, 1)
+                    
+                if self.skip_current_color:
+                    break
+                
+                # Extract line coordinates
+                start_point, end_point = d_line
+                
+                # Calculate actual screen coordinates
+                screen_start_x = self.canvas_x + start_point[0]
+                screen_start_y = self.canvas_y + start_point[1]
+                screen_end_x = self.canvas_x + end_point[0]
+                screen_end_y = self.canvas_y + end_point[1]
+                
+                # Draw the diagonal line
+                self.draw_diagonal_line((screen_start_x, screen_start_y), 
+                                       (screen_end_x, screen_end_y))
+                operation_counter += 1
+                
+                # Update progress
+                progress_percent = int(operation_counter / total_operations * 100)
+                if progress_percent != previous_progress_percent:
+                    previous_progress_percent = progress_percent
+                    self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+            
+            # Reset skip flag if it was set during diagonal lines
             if self.skip_current_color:
                 self.skip_current_color = False
                 continue
@@ -2111,7 +2179,7 @@ class rustDaVinci:
         QApplication.processEvents()
         
         # Create a dictionary to store:
-        # (color_idx, opacity_idx) -> { 'h_lines': [...], 'v_lines': [...], 'points': [...] }
+        # (color_idx, opacity_idx) -> { 'h_lines': [...], 'v_lines': [...], 'd_lines': [...], 'points': [...] }
         precomputed_lines = {}
         
         # Create a temporary 2D grid representing the image to track processed pixels
@@ -2128,8 +2196,9 @@ class rustDaVinci:
         color_count = len(color_opacity_map)
         total_progress_steps = 100
         grid_building_steps = 20
-        horizontal_line_steps = 40
-        vertical_line_steps = 40
+        horizontal_line_steps = 25
+        vertical_line_steps = 25
+        diagonal_line_steps = 20
         
         progress_bar.setMaximum(total_progress_steps)
         progress_bar.setValue(0)
@@ -2165,10 +2234,11 @@ class rustDaVinci:
             precomputed_lines[(color_idx, opacity_idx)] = {
                 'h_lines': [],  # Horizontal lines: [(start_x, y, end_x), ...]
                 'v_lines': [],  # Vertical lines: [(x, start_y, end_y), ...]
+                'd_lines': [],  # Diagonal lines: [((start_x, start_y), (end_x, end_y)), ...]
                 'points': []    # Individual points: [(x, y), ...]
             }
         
-        # Step 2: Find horizontal lines - 40% of progress (grid_building_steps to grid_building_steps+horizontal_line_steps)
+        # Step 2: Find horizontal lines - 25% of progress (grid_building_steps to grid_building_steps+horizontal_line_steps)
         progress_status.setText("Finding horizontal lines...")
         QApplication.processEvents()
         
@@ -2221,7 +2291,7 @@ class rustDaVinci:
                         # Line too short, just increment x to look for the next line
                         x = line_end + 1
             
-            # Update progress for horizontal lines - scale from 20% to 60%
+            # Update progress for horizontal lines - scale from 20% to 45%
             if y % 10 == 0 or y == self.canvas_h - 1:
                 h_percent = grid_building_steps + int((y / self.canvas_h) * horizontal_line_steps)
                 progress_bar.setValue(h_percent)
@@ -2233,7 +2303,7 @@ class rustDaVinci:
                                          f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
                 QApplication.processEvents()
         
-        # Step 3: Find vertical lines - 40% of progress (60% to 100%)
+        # Step 3: Find vertical lines - 25% of progress (45% to 70%)
         progress_status.setText("Finding vertical lines...")
         QApplication.processEvents()
         
@@ -2286,7 +2356,7 @@ class rustDaVinci:
                         # Line too short, just increment y to look for the next line
                         y = line_end + 1
             
-            # Update progress for vertical lines - scale from 60% to 100%
+            # Update progress for vertical lines - scale from 45% to 70%
             if x % 10 == 0 or x == self.canvas_w - 1:
                 v_percent = grid_building_steps + horizontal_line_steps + int((x / self.canvas_w) * vertical_line_steps)
                 progress_bar.setValue(v_percent)
@@ -2297,10 +2367,52 @@ class rustDaVinci:
                 progress_status.setText(f"Finding vertical lines: {int(x / self.canvas_w * 100)}% | " +
                                          f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
                 QApplication.processEvents()
+                
+        # Step 4: Find diagonal lines - 20% of progress (70% to 90%)
+        # Only do diagonal detection if the setting is enabled
+        use_diagonal_lines = bool(self.settings.value("use_diagonal_lines", default_settings["use_diagonal_lines"]))
         
-        # Step 4: Collect remaining points
+        if use_diagonal_lines:
+            progress_status.setText("Finding diagonal lines...")
+            progress_bar.setValue(70)  # Set to start of diagonal processing
+            QApplication.processEvents()
+            
+            # Process each color for diagonal lines
+            colors_processed = 0
+            for (color_idx, opacity_idx), count in color_opacity_map.items():
+                # Only process colors with enough pixels to potentially form diagonal lines
+                if count < min_line_width:
+                    continue
+                    
+                # Use the diagonal detection algorithm
+                color_key = (color_idx, opacity_idx)
+                diagonal_lines = self.detect_diagonal_lines(grid, color_key, processed, min_line_width)
+                
+                # Store the detected diagonal lines
+                precomputed_lines[color_key]['d_lines'] = diagonal_lines
+                
+                # Update progress for diagonal line detection - scale from 70% to 90%
+                colors_processed += 1
+                if colors_processed % 5 == 0 or colors_processed == total_colors:
+                    d_percent = grid_building_steps + horizontal_line_steps + vertical_line_steps + int((colors_processed / total_colors) * diagonal_line_steps)
+                    progress_bar.setValue(d_percent)
+                    elapsed = time.time() - start_time
+                    remaining = (elapsed / d_percent) * (total_progress_steps - d_percent) if d_percent > 0 else 0
+                    elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
+                    remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
+                    progress_status.setText(f"Finding diagonal lines: {int(colors_processed / total_colors * 100)}% | " +
+                                           f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
+                    QApplication.processEvents()
+        else:
+            # Skip diagonal line detection
+            progress_bar.setValue(90)
+            progress_status.setText("Diagonal line detection disabled - skipping")
+            QApplication.processEvents()
+            time.sleep(0.5)  # Brief pause to show the status message
+        
+        # Step 5: Collect remaining points (90% to 100%)
         progress_status.setText("Collecting remaining points...")
-        progress_bar.setValue(95)
+        progress_bar.setValue(90)
         QApplication.processEvents()
         
         # Find all remaining points for each color
@@ -2317,6 +2429,7 @@ class rustDaVinci:
         # Calculate statistics
         total_horizontal_lines = sum(len(data['h_lines']) for data in precomputed_lines.values())
         total_vertical_lines = sum(len(data['v_lines']) for data in precomputed_lines.values())
+        total_diagonal_lines = sum(len(data['d_lines']) for data in precomputed_lines.values())
         total_points = sum(len(data['points']) for data in precomputed_lines.values())
         
         # Final progress update
@@ -2330,9 +2443,34 @@ class rustDaVinci:
         time.sleep(0.5)
         progress_dialog.close()
         
+        # Calculate how many individual pixels were converted to lines
+        total_line_pixels = (
+            # Calculate horizontal line pixels
+            sum(end_x - start_x + 1 
+                for data in precomputed_lines.values() 
+                for start_x, y, end_x in data['h_lines']) +
+            # Calculate vertical line pixels
+            sum(end_y - start_y + 1 
+                for data in precomputed_lines.values() 
+                for x, start_y, end_y in data['v_lines']) +
+            # Calculate diagonal line pixels (length of each diagonal)
+            sum(max(abs(end_x - start_x), abs(end_y - start_y)) + 1 
+                for data in precomputed_lines.values() 
+                for (start_x, start_y), (end_x, end_y) in data['d_lines'])
+        )
+        
+        pixels_saved = total_line_pixels - (total_horizontal_lines + total_vertical_lines + total_diagonal_lines)
+        
         self.parent.ui.log_TextEdit.append(
             f"Optimization complete: {total_horizontal_lines} horizontal lines, " +
-            f"{total_vertical_lines} vertical lines, {total_points} individual points"
+            f"{total_vertical_lines} vertical lines, " +
+            f"{total_diagonal_lines} diagonal lines, " +
+            f"{total_points} individual points"
+        )
+        
+        self.parent.ui.log_TextEdit.append(
+            f"Saved {pixels_saved} individual clicks by using line optimization" +
+            f" ({(pixels_saved / (pixels_saved + total_points) * 100):.1f}% efficiency)"
         )
         
         return precomputed_lines
@@ -2346,3 +2484,95 @@ class rustDaVinci:
         self.current_ctrl_brush = None
         self.current_ctrl_opacity = None
         self.current_ctrl_color = None
+
+    def is_same_color_pixel(self, grid, x, y, color_key, processed):
+        """Check if a pixel at (x,y) has the specified color and hasn't been processed yet"""
+        return ((x, y) in grid and 
+                color_key in grid[(x, y)] and 
+                (x, y) not in processed)
+
+    def detect_diagonal_lines(self, grid, color_key, processed, min_line_width):
+        """
+        Detect diagonal lines for a specific color key.
+        
+        Args:
+            grid: Dictionary mapping (x, y) coordinates to list of color keys
+            color_key: The (color_idx, opacity_idx) key to detect lines for
+            processed: Set of already processed pixels
+            min_line_width: Minimum number of pixels to consider as a line
+            
+        Returns:
+            List of diagonal lines in format [((start_x, start_y), (end_x, end_y)), ...]
+        """
+        diagonal_lines = []
+        candidates = {}  # Dictionary to track diagonal line candidates
+        
+        # Check for pixels of this color that haven't been processed yet
+        for (x, y), colors in grid.items():
+            if color_key in colors and (x, y) not in processed:
+                # Check for diagonal patterns in 4 directions
+                # Direction 1: 45° (down-right)
+                diag1 = f"dr_{x - y}"  # Down-right diagonal identifier
+                if diag1 not in candidates:
+                    candidates[diag1] = []
+                candidates[diag1].append((x, y))
+                
+                # Direction 2: 135° (down-left)
+                diag2 = f"dl_{x + y}"  # Down-left diagonal identifier
+                if diag2 not in candidates:
+                    candidates[diag2] = []
+                candidates[diag2].append((x, y))
+        
+        # Process diagonal line candidates
+        for diag_id, points in candidates.items():
+            # Only process if we have enough points to make a line
+            if len(points) < min_line_width:
+                continue
+                
+            # Sort points based on the direction
+            if diag_id.startswith("dr_"):  # Down-right: sort by x (or y)
+                points.sort(key=lambda p: p[0])
+            else:  # Down-left: sort by x
+                points.sort(key=lambda p: p[0])
+            
+            # Find continuous segments in the sorted points
+            segments = []
+            current_segment = []
+            
+            for i, point in enumerate(points):
+                if not current_segment:
+                    current_segment.append(point)
+                    continue
+                    
+                prev_point = current_segment[-1]
+                
+                # Check if points are adjacent diagonally
+                is_adjacent = False
+                if diag_id.startswith("dr_"):  # Down-right
+                    is_adjacent = (point[0] == prev_point[0] + 1 and point[1] == prev_point[1] + 1)
+                else:  # Down-left
+                    is_adjacent = (point[0] == prev_point[0] + 1 and point[1] == prev_point[1] - 1)
+                
+                if is_adjacent:
+                    current_segment.append(point)
+                else:
+                    # End current segment if points aren't adjacent
+                    if len(current_segment) >= min_line_width:
+                        segments.append(current_segment)
+                    current_segment = [point]
+            
+            # Add the last segment if it's long enough
+            if len(current_segment) >= min_line_width:
+                segments.append(current_segment)
+            
+            # Convert segments to line format and add to result
+            for segment in segments:
+                start_point = segment[0]
+                end_point = segment[-1]
+                diagonal_lines.append((start_point, end_point))
+                
+                # Mark all pixels in this segment as processed
+                for px, py in segment:
+                    processed.add((px, py))
+        
+        return diagonal_lines

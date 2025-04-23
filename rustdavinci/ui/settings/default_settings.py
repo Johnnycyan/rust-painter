@@ -30,6 +30,7 @@ default_settings = {
     "line_delay": 30,
     "minimum_line_width": 10,
     "brush_type": 1,
+    "use_diagonal_lines": 1,      # Enable diagonal line detection (greatly improves efficiency)
     # New cache settings
     "use_cached_data": 1,         # Whether to use cached color calculations if available
     "auto_save_cache": 1          # Whether to automatically save color calculations to cache
