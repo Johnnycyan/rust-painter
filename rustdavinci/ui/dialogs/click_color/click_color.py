@@ -23,7 +23,6 @@ class Click_Color(QDialog):
         self.settings_window = parent
         self.main_window = self.settings_window.parent
         self.settings = QSettings()
-        self.main_window.rustDaVinci.use_hidden_colors = bool(self.settings.value("hidden_colors", default_settings["hidden_colors"]))
 
         self.color_index = 0
 
@@ -47,26 +46,9 @@ class Click_Color(QDialog):
 
     def populate_list(self):
         """ Populates the colors list """
-        use_hidden_colors = bool(self.settings.value("hidden_colors", default_settings["hidden_colors"]))
-        use_brush_opacities = bool(self.settings.value("brush_opacities", default_settings["brush_opacities"]))
-
-        if use_hidden_colors:
-            if use_brush_opacities:
-                for i, color in enumerate(rust_palette):
-                    self.append_color(color)
-            else:
-                for i, color in enumerate(rust_palette):
-                    if i == 64: break
-                    self.append_color(color)
-        else:
-            if use_brush_opacities:
-                for i, color in enumerate(rust_palette):
-                    if (i >= 0 and i <= 19) or (i >= 64 and i <= 83) or (i >= 128 and i <= 147) or (i >= 192 and i <= 211):
-                        self.append_color(color)
-            else:
-                for i, color in enumerate(rust_palette):
-                    if i == 20: break
-                    self.append_color(color)
+        for i, color in enumerate(rust_palette):
+            if (i >= 0 and i <= 19) or (i >= 64 and i <= 83) or (i >= 128 and i <= 147) or (i >= 192 and i <= 211):
+                self.append_color(color)
 
 
     def append_color(self, color):

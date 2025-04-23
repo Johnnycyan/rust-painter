@@ -38,7 +38,7 @@ def move_content(srcDir, dstDir):
 
 def main():
     # Build with pyinstaller
-    subprocess.run('pyinstaller --name="RustDaVinci" --icon=./../images/RustDaVinci-icon.ico app.pyw')
+    subprocess.run('pyinstaller --name="Rust Painter" --icon=./../images/RustDaVinci-icon.ico app.pyw')
 
     # Create executable folder if not exist, else remove content of executable folder
     folder_name = "executable"
@@ -51,14 +51,14 @@ def main():
     move_content("dist/", folder_name)
 
     # move opencv_template folder to executable folder
-    os.mkdir("executable/RustDaVinci/opencv_template")
-    copy_content("opencv_template/", "executable/RustDaVinci/opencv_template/")
+    os.mkdir("executable/Rust Painter/opencv_template")
+    copy_content("opencv_template/", "executable/Rust Painter/opencv_template/")
 
     # Remove build directories
     remove_content("build/")
     os.rmdir("build")
     os.rmdir("dist")
-    os.remove("RustDaVinci.spec")
+    os.remove("Rust Painter.spec")
 
 
 

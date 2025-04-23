@@ -171,14 +171,14 @@ class Ui_MainUI(object):
 
     def retranslateUi(self, MainUI):
         _translate = QtCore.QCoreApplication.translate
-        MainUI.setWindowTitle(_translate("MainUI", "RustDaVinci"))
+        MainUI.setWindowTitle(_translate("MainUI", "Rust Painter"))
         self.load_image_PushButton.setToolTip(_translate("MainUI", "Load Image from File or URL"))
         self.load_image_PushButton.setText(_translate("MainUI", "         Load Image...        "))
         self.identify_ctrl_PushButton.setToolTip(_translate("MainUI", "Capture the painting control area manually or automatically"))
         self.identify_ctrl_PushButton.setText(_translate("MainUI", " Capture Control Area..."))
         self.paint_image_PushButton.setToolTip(_translate("MainUI", "Paint the Image"))
         self.paint_image_PushButton.setText(_translate("MainUI", "         Paint Image           "))
-        self.settings_PushButton.setToolTip(_translate("MainUI", "Show RustDaVinci Settings"))
+        self.settings_PushButton.setToolTip(_translate("MainUI", "Show Rust Painter Settings"))
         self.settings_PushButton.setText(_translate("MainUI", "            Settings              "))
         self.preview_PushButton.setToolTip(_translate("MainUI", "Show Original Image and Preview of the Quantized Images"))
         self.preview_PushButton.setText(_translate("MainUI", "Show Image >>"))

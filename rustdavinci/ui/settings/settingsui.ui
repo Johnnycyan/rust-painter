@@ -29,7 +29,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>RustDaVinci Settings</string>
+   <string>Rust Painter Settings</string>
   </property>
   <widget class="QTabWidget" name="tabWidget">
    <property name="geometry">
@@ -305,10 +305,10 @@
       </rect>
      </property>
      <property name="toolTip">
-      <string>This will set RustDaVinci app topmost property to true and will appear above all windows while painting</string>
+      <string>This will set Rust Painter app topmost property to true and will appear above all windows while painting</string>
      </property>
      <property name="text">
-      <string>Set the RustDaVinci window on topmost while painting</string>
+      <string>Set the Rust Painter window on topmost while painting</string>
      </property>
      <property name="checked">
       <bool>true</bool>
@@ -487,7 +487,7 @@
       </rect>
      </property>
      <property name="toolTip">
-      <string>Opens a dialog window showing all the possible colors in RustDaVinci</string>
+      <string>Opens a dialog window showing all the possible colors in Rust Painter</string>
      </property>
      <property name="text">
       <string>Available
@@ -637,25 +637,6 @@ Colors</string>
       <bool>true</bool>
      </property>
     </widget>
-    <widget class="QCheckBox" name="opacities_CheckBox">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>340</y>
-       <width>341</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="toolTip">
-      <string>This will improve paintings by utilizing different brush opacities</string>
-     </property>
-     <property name="text">
-      <string>Improve paintings by utilizing different brush opacities</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
     <widget class="QCheckBox" name="draw_lines_CheckBox">
      <property name="geometry">
       <rect>
@@ -686,36 +667,6 @@ Colors</string>
      </property>
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
-     </property>
-    </widget>
-    <widget class="QLabel" name="label_24">
-     <property name="geometry">
-      <rect>
-       <x>40</x>
-       <y>370</y>
-       <width>321</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>(Only recommended if 1920x1080 resolution in-game and 
-the paint control area is automatically found)</string>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="hidden_colors_CheckBox">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>360</y>
-       <width>341</width>
-       <height>16</height>
-      </rect>
-     </property>
-     <property name="toolTip">
-      <string>This will improve paintings by utilizing hidden colors (colors hidden between the visible color circles)</string>
-     </property>
-     <property name="text">
-      <string>Use the hidden color palette</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="show_info_CheckBox">
@@ -1059,22 +1010,6 @@ when loading new image</string>
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
-    <widget class="QCheckBox" name="double_click_CheckBox">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>230</y>
-       <width>341</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="toolTip">
-      <string>This will automatically click the mouse button twice during the painting process eliminating any dead pixels</string>
-     </property>
-     <property name="text">
-      <string>Double-click the mouse for improved painting accuracy</string>
-     </property>
-    </widget>
     <widget class="QPushButton" name="click_color_PushButton">
      <property name="geometry">
       <rect>
@@ -1106,10 +1041,10 @@ when loading new image</string>
       </rect>
      </property>
      <property name="toolTip">
-      <string>https://github.com/alexemanuelol/RustDaVinci</string>
+      <string>https://github.com/Johnnycyan/rust-painter</string>
      </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/alexemanuelol/RustDaVinci&quot;&gt;&lt;span style=&quot; font-weight:600; text-decoration: underline; color:#000000;&quot;&gt;The GitHub Repository&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/Johnnycyan/rust-painter&quot;&gt;&lt;span style=&quot; font-weight:600; text-decoration: underline; color:#000000;&quot;&gt;The GitHub Repository&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="textFormat">
       <enum>Qt::RichText</enum>
@@ -1156,7 +1091,7 @@ when loading new image</string>
       </rect>
      </property>
      <property name="text">
-      <string>RustDaVinci is an automatic sign painter for the game Rust by Facepunch. The application is completely free and open-source. For those who would like to contribute to the application please visit the GitHub page in the link below. For those who just want to use the application as it is, it is strongly recommended to only use the released version of the application to avoid trouble with EAC/ Facepunch. The latest releases can be found on the Github page.</string>
+      <string>Rust Painter is an automatic sign painter for the game Rust by Facepunch. The application is completely free and open-source. For those who would like to contribute to the application please visit the GitHub page in the link below. For those who just want to use the application as it is, it is strongly recommended to only use the released version of the application to avoid trouble with EAC/ Facepunch. The latest releases can be found on the Github page.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -1172,7 +1107,7 @@ when loading new image</string>
       </rect>
      </property>
      <property name="text">
-      <string>v0.4.0</string>
+      <string>v1.0.0</string>
      </property>
     </widget>
     <widget class="QLabel" name="versionLabel_2">
@@ -1198,7 +1133,7 @@ when loading new image</string>
       </rect>
      </property>
      <property name="text">
-      <string>RustDaVinci is licensed under GNU GPL3
+      <string>Rust Painter is licensed under GNU GPL3
 Developed by AlexEmanuelol</string>
      </property>
      <property name="wordWrap">
@@ -1247,10 +1182,10 @@ Developed by AlexEmanuelol</string>
       </rect>
      </property>
      <property name="toolTip">
-      <string>https://github.com/alexemanuelol/RustDaVinci/blob/master/docs/FAQ.md</string>
+      <string>https://github.com/Johnnycyan/rust-painter/blob/master/docs/FAQ.md</string>
      </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/alexemanuelol/RustDaVinci/blob/master/docs/FAQ.md&quot;&gt;&lt;span style=&quot; font-weight:600; text-decoration: underline; color:#000000;&quot;&gt;Frequently Asked Questions&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/Johnnycyan/rust-painter/blob/master/docs/FAQ.md&quot;&gt;&lt;span style=&quot; font-weight:600; text-decoration: underline; color:#000000;&quot;&gt;Frequently Asked Questions&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="textFormat">
       <enum>Qt::RichText</enum>

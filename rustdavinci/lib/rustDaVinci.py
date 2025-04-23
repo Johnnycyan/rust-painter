@@ -58,8 +58,6 @@ class rustDaVinci:
 
         # Booleans
         self.org_img_ok = False
-        self.use_double_click = False
-        self.use_hidden_colors = False
 
         # Keyboard interrupt variables
         self.pause_key = None
@@ -97,7 +95,6 @@ class rustDaVinci:
         self.click_delay = 0
         self.line_delay = 0
         self.ctrl_area_delay = 0
-        self.use_double_click = False
 
         # Color tracking for status display
         self.total_colors = 0
@@ -143,9 +140,6 @@ class rustDaVinci:
                 )
             )
             / 1000
-        )
-        self.use_double_click = bool(
-            self.settings.value("double_click", default_settings["double_click"])
         )
 
         # Update the pyautogui delay
@@ -217,13 +211,8 @@ class rustDaVinci:
                         "show_preview_load", default_settings["show_preview_load"]
                     )
                 ):
-                    if (
-                        int(self.settings.value("quality", default_settings["quality"]))
-                        == 0
-                    ):
-                        self.pixmap_on_display = 1
-                    else:
-                        self.pixmap_on_display = 2
+                    # Always use the optimized high quality pixmap
+                    self.pixmap_on_display = 2
 
                     if self.parent.is_expanded:
                         self.parent.label.hide()
@@ -604,18 +593,18 @@ class rustDaVinci:
                 self.parent.ui.log_TextEdit.append("Image processing cancelled or failed. Please try again.")
                 return
             
-            # Save optimized image for normal preview
-            optimized_img.save("temp_normal.png")
-            self.quantized_img_pixmap_normal = QPixmap("temp_normal.png")
-            os.remove("temp_normal.png")
+            # Save optimized image to use for both normal and high quality previews
+            # (since they're now identical - we always use the best quality)
+            optimized_img.save("temp_optimized.png")
+            optimized_pixmap = QPixmap("temp_optimized.png")
+            os.remove("temp_optimized.png")
             
-            # For high quality preview, we'll also use the optimized image
-            # But with slightly different parameters if needed
-            optimized_img.save("temp_high.png")
-            self.quantized_img_pixmap_high = QPixmap("temp_high.png")
-            os.remove("temp_high.png")
+            # Use the same high-quality optimized image for both normal and high quality
+            self.quantized_img_pixmap_normal = optimized_pixmap
+            self.quantized_img_pixmap_high = optimized_pixmap
             
             self.org_img_ok = True
+            self.parent.ui.log_TextEdit.append("Image processed with optimal color layering.")
         except Exception as e:
             print(f"Error creating pixmaps: {str(e)}")
             self.org_img_ok = False
@@ -666,22 +655,27 @@ class rustDaVinci:
             # Get the current loaded image path for cache saving
             current_image_path = self.settings.value("folder_path", "")
 
+            # Check if we need to reprocess based on settings that affect color processing
+            need_reprocess = False
+            
             # First try to use cached calculations if available
             if (self.color_calculation_cache['resized_img'] is not None and
                 self.color_calculation_cache['background_color'] == bg_color_rgb and
-                self.color_calculation_cache['simulated_img'] is not None):
+                self.color_calculation_cache['simulated_img'] is not None and
+                resized_img.size == self.color_calculation_cache['resized_img'].size):
                 
-                # Images should have the same dimensions to reuse calculation
-                if (self.color_calculation_cache['resized_img'].size == resized_img.size):
-                    self.parent.ui.log_TextEdit.append("Reusing previously calculated color mapping...")
-                    QApplication.processEvents()
-                    
-                    # Reuse the existing calculation
-                    self.quantized_img = self.color_calculation_cache['simulated_img']
-                    self.layered_colors_map = self.color_calculation_cache['layered_colors_map']
-                    
-            # If no cache or cache doesn't match, calculate optimal colors
-            if self.quantized_img is None:
+                self.parent.ui.log_TextEdit.append("Reusing previously calculated color mapping...")
+                QApplication.processEvents()
+                
+                # Reuse the existing calculation
+                self.quantized_img = self.color_calculation_cache['simulated_img']
+                self.layered_colors_map = self.color_calculation_cache['layered_colors_map']
+            else:
+                # Need to reprocess if any of these essential settings have changed
+                need_reprocess = False
+                
+            # If no cache or if we need to reprocess, calculate optimal colors
+            if need_reprocess or self.quantized_img is None:
                 # Process the image using our optimal color layering algorithm
                 try:
                     self.parent.ui.log_TextEdit.append("Calculating optimal color layering...")
@@ -739,10 +733,6 @@ class rustDaVinci:
 
     def update_palette(self, rgb_background):
         """Update the palette used for image quantization with the new 4x16 color grid"""
-        use_brush_opacities = bool(
-            self.settings.value("brush_opacities", default_settings["brush_opacities"])
-        )
-
         # Find the background color in the rust_palette list
         background_index = 3  # Default to white (index 3)
         for i, color in enumerate(rust_palette):
@@ -1276,7 +1266,6 @@ class rustDaVinci:
                     Estimated time for only clicking
         """
         one_click_time = self.click_delay + 0.001
-        one_click_time = one_click_time * 2 if self.use_double_click else one_click_time
         one_line_time = (self.line_delay * 5) + 0.0035
         set_paint_controls_time = (
             len(self.img_colors) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
@@ -1304,12 +1293,8 @@ class rustDaVinci:
         """Click the pixel"""
         if isinstance(x, tuple):
             pyautogui.click(x[0], x[1])
-            if self.use_double_click:
-                pyautogui.click(x[0], x[1])
         else:
             pyautogui.click(x, y)
-            if self.use_double_click:
-                pyautogui.click(x, y)
 
     def draw_line(self, point_A, point_B):
         """Draws a horizontal line between point_A and point_B.
@@ -1604,9 +1589,6 @@ class rustDaVinci:
     def start_painting(self):
         """Start the painting"""
         # Update global variables
-        self.use_hidden_colors = bool(
-            self.settings.value("hidden_colors", default_settings["hidden_colors"])
-        )
         self.pause_key = str(
             self.settings.value("pause_key", default_settings["pause_key"])
         ).lower()
@@ -1622,9 +1604,6 @@ class rustDaVinci:
             self.settings.value(
                 "minimum_line_width", default_settings["minimum_line_width"]
             )
-        )
-        use_brush_opacities = bool(
-            self.settings.value("brush_opacities", default_settings["brush_opacities"])
         )
         hide_preview_paint = bool(
             self.settings.value(
@@ -1708,7 +1687,6 @@ class rustDaVinci:
         
         # Estimate time with optimized operations
         one_click_time = self.click_delay + 0.001
-        one_click_time = one_click_time * 2 if self.use_double_click else one_click_time
         one_line_time = (self.line_delay * 5) + 0.0035
         set_paint_controls_time = len(precomputed_lines) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
         
@@ -1788,7 +1766,7 @@ class rustDaVinci:
             
             # Find the background color index in our base colors
             background_idx = -1
-            for i, color in enumerate(self.base_palette_colors):
+            for i, color in self.base_palette_colors:
                 if color == bg_color_rgb:
                     background_idx = i
                     break

@@ -3,12 +3,12 @@
 
 from setuptools import setup
 
-NAME = "RustDaVinci"
+NAME = "Rust Painter"
 VERSION = "0.1"
 DESCRIPTION = "Automatic Sign Art Painter for the game Rust by Facepunch"
 AUTHOR = "Alexander Emanuelsson"
 EMAIL = "Alexander.Emanuelsson94@gmail.com"
-URL = "https://github.com/alexemanuelol/RustDaVinci"
+URL = "https://github.com/Johnnycyan/rust-painter"
 REQUIRED = [
     "Pillow==8.3.2",
     "PyAutoGUI==0.9.41",

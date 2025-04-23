@@ -7,7 +7,7 @@
 <a href="https://www.reddit.com/user/Alexemanuelol"><img src="https://img.shields.io/badge/Reddit-Alexemanuelol-FF4500?style=flat&logo=reddit" alt="reddit"/></a>
 <a href="https://ko-fi.com/alexemanuelol"><img src="https://img.shields.io/badge/Donate%20a%20Coffee-alexemanuelol-yellow?style=flat&logo=buy-me-a-coffee" alt="donate on ko-fi"/></a>
 
-<h1 align="center">RustDaVinci - An automatic sign painter for Rust Facepunch</h1>
+<h1 align="center">Rust Painter - An automatic sign painter for Rust Facepunch</h1>
 </p>
 
 ## **WARNING!**
@@ -39,8 +39,8 @@ NOTE: Only tested on Windows 10
 2. Click the "Show Image >>" button to get a preview of how the canvas will look when the painting process is done. There are three buttons when the preview is shown, "Original" which shows the original image, "Normal" that shows the normal quality outcome and "High" which shows the outcome of the high quality dithering algorithm.
 3. You can also open settings while the preview is shown to modify things such as "Use the hidden colors palette" and "Improve paintings by utilizing different brush opacities" and immediately see the impact on the preview.
 4. When you are satisfied with the settings you can go ahead and click the button "Capture Control Area". This will give you two alternatives, either capture it manually (shown in the gifs below), or capture it automatically using openCV.
-5. When the paint control area is captured you can go ahead and click the "Paint Image". This will prompt you to capture the area in which the canvas is located. It's the same procedure as with manually capturing the paint controls area. After that, RustDaVinci will calculate things such as estimated time, amount of pixels to paint, lines to paint, dimensions of the canvas and finaly give you the option to start painting.
-6. While RustDaVinci is painting it is recommended to not move the mouse nor keyboard. You can follow the progress both from the progressbar and also the output window which shows what colors it's on. During the painting process, it is possible to cancel the painting process (default ESC), pause the painting process (default F10) or skip the current color (default F11).
+5. When the paint control area is captured you can go ahead and click the "Paint Image". This will prompt you to capture the area in which the canvas is located. It's the same procedure as with manually capturing the paint controls area. After that, Rust Painter will calculate things such as estimated time, amount of pixels to paint, lines to paint, dimensions of the canvas and finaly give you the option to start painting.
+6. While Rust Painter is painting it is recommended to not move the mouse nor keyboard. You can follow the progress both from the progressbar and also the output window which shows what colors it's on. During the painting process, it is possible to cancel the painting process (default ESC), pause the painting process (default F10) or skip the current color (default F11).
 
 
 ![Capture Canvas](rustdavinci/ui/resources/gifs/capture_canvas.gif)
@@ -54,7 +54,7 @@ Make sure you read the [CONTRIBUTING.md](CONTRIBUTING.md) file to setup a dedica
 Clone the repository with the following command:
 
 ``` bash
-git clone https://github.com/alexemanuelol/RustDaVinci.git
+git clone https://github.com/Johnnycyan/rust-painter.git
 ```
 
 Enter the repository and run the following command to install python modules
@@ -65,9 +65,9 @@ pip3 install -r requirements.txt
 
 ## Screenshots
 
-![RustDaVinci Preview Image 1](images/RustDaVinci-Preview-1.png)
+![Rust Painter Preview Image 1](images/RustDaVinci-Preview-1.png)
 
-![RustDaVinci Preview Image 2](images/RustDaVinci-Preview-2.png)
+![Rust Painter Preview Image 2](images/RustDaVinci-Preview-2.png)
 
 ![darth vader](screenshots/darthvader.jpg)
 

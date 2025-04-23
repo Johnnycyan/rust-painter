@@ -207,7 +207,7 @@
      </font>
     </property>
     <property name="toolTip">
-     <string>Show RustDaVinci Settings</string>
+     <string>Show Rust Painter Settings</string>
     </property>
     <property name="text">
      <string>            Settings              </string>

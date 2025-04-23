@@ -12,8 +12,8 @@ from ui.views.main import MainWindow
 def run():
 
     # Set some application settings for QSettings
-    QtCore.QCoreApplication.setOrganizationName("RustDaVinci")
-    QtCore.QCoreApplication.setApplicationName("RustDaVinci")
+    QtCore.QCoreApplication.setOrganizationName("Rust Painter")
+    QtCore.QCoreApplication.setApplicationName("Rust Painter")
 
     # Setup the application and start
     app = QtWidgets.QApplication(sys.argv)

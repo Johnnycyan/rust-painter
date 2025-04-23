@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Color blending module for RustDaVinci.
+Color blending module for Rust Painter.
 This module provides functions to calculate the optimal layering of colors
 to achieve a target color using Rust's painting system.
 """

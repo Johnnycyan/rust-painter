@@ -1,6 +1,6 @@
 # Contributing
 
-Hello! Interested in contributing to this repository and make RustDaVinci even more awesome? Great!
+Hello! Interested in contributing to this repository and make Rust Painter even more awesome? Great!
 When contributing to this repository, please first discuss the change you wish to make via email, You can refer to the [TODO list](TODO.md) where most of the tasks, ideas and bugs are located. Testing from the master branch is always appreciated and any issues that is found should be added to the TODO list.
 
 Please note we have a code of conduct, please follow it in all your interactions with the project.

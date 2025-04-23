@@ -73,13 +73,10 @@ class Settings(QDialog):
         self.ui.update_canvas_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.update_canvas_end_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.draw_lines_CheckBox.stateChanged.connect(self.enableApply)
-        self.ui.double_click_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.show_info_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.show_preview_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.hide_preview_CheckBox.stateChanged.connect(self.enableApply)
         self.ui.paint_background_CheckBox.stateChanged.connect(self.enableApply)
-        self.ui.opacities_CheckBox.stateChanged.connect(self.enableApply)
-        self.ui.hidden_colors_CheckBox.stateChanged.connect(self.enableApply)
 
         # Comboboxes
         self.ui.quality_ComboBox.currentIndexChanged.connect(self.enableApply)
@@ -114,13 +111,10 @@ class Settings(QDialog):
         self.setting_to_checkbox("update_canvas", self.ui.update_canvas_CheckBox, default_settings["update_canvas"])
         self.setting_to_checkbox("update_canvas_end", self.ui.update_canvas_end_CheckBox, default_settings["update_canvas_end"])
         self.setting_to_checkbox("draw_lines", self.ui.draw_lines_CheckBox, default_settings["draw_lines"])
-        self.setting_to_checkbox("double_click", self.ui.double_click_CheckBox, default_settings["double_click"])
         self.setting_to_checkbox("show_information", self.ui.show_info_CheckBox, default_settings["show_information"])
         self.setting_to_checkbox("show_preview_load", self.ui.show_preview_CheckBox, default_settings["show_preview_load"])
         self.setting_to_checkbox("hide_preview_paint", self.ui.hide_preview_CheckBox, default_settings["hide_preview_paint"])
         self.setting_to_checkbox("paint_background", self.ui.paint_background_CheckBox, default_settings["paint_background"])
-        self.setting_to_checkbox("brush_opacities", self.ui.opacities_CheckBox, default_settings["brush_opacities"])
-        self.setting_to_checkbox("hidden_colors", self.ui.hidden_colors_CheckBox, default_settings["hidden_colors"])
 
         # Comboboxes
         index = self.settings.value("quality", default_settings["quality"])
@@ -186,19 +180,20 @@ class Settings(QDialog):
 
     def saveSettings(self):
         """ Save settings. """
+        # Track which settings have changed that would require image reprocessing
+        reprocess_needed = False
+        prev_background_color = self.settings.value("background_color", default_settings["background_color"])
+        
         # Checkboxes
         self.checkbox_to_setting("window_topmost", self.ui.topmost_CheckBox.isChecked())
         self.checkbox_to_setting("skip_background_color", self.ui.skip_background_CheckBox.isChecked())
         self.checkbox_to_setting("update_canvas", self.ui.update_canvas_CheckBox.isChecked())
         self.checkbox_to_setting("update_canvas_end", self.ui.update_canvas_end_CheckBox.isChecked())
         self.checkbox_to_setting("draw_lines", self.ui.draw_lines_CheckBox.isChecked())
-        self.checkbox_to_setting("double_click", self.ui.double_click_CheckBox.isChecked())
         self.checkbox_to_setting("show_information", self.ui.show_info_CheckBox.isChecked())
         self.checkbox_to_setting("show_preview_load", self.ui.show_preview_CheckBox.isChecked())
         self.checkbox_to_setting("hide_preview_paint", self.ui.hide_preview_CheckBox.isChecked())
         self.checkbox_to_setting("paint_background", self.ui.paint_background_CheckBox.isChecked())
-        self.checkbox_to_setting("brush_opacities", self.ui.opacities_CheckBox.isChecked())
-        self.checkbox_to_setting("hidden_colors", self.ui.hidden_colors_CheckBox.isChecked())
 
         # Comboboxes
         self.settings.setValue("quality", self.ui.quality_ComboBox.currentIndex())
@@ -212,7 +207,13 @@ class Settings(QDialog):
         self.settings.setValue("pause_key", self.ui.pause_key_LineEdit.text())
         self.settings.setValue("skip_key", self.ui.skip_key_LineEdit.text())
         self.settings.setValue("abort_key", self.ui.abort_key_LineEdit.text())
-        self.settings.setValue("background_color", self.ui.background_LineEdit.text())
+        
+        # Check if background color has changed
+        new_background_color = self.ui.background_LineEdit.text()
+        self.settings.setValue("background_color", new_background_color)
+        if prev_background_color != new_background_color:
+            reprocess_needed = True
+            
         self.settings.setValue("click_delay", self.ui.click_delay_LineEdit.text())
         self.settings.setValue("ctrl_area_delay", self.ui.ctrl_delay_LineEdit.text())
         self.settings.setValue("line_delay", self.ui.line_delay_LineEdit.text())
@@ -227,12 +228,19 @@ class Settings(QDialog):
         else:
             self.settings.setValue("skip_colors", [])
 
-
+        # Always update basic settings for painting controls
         self.parent.rustDaVinci.update()
 
+        # Only reprocess image if necessary settings changed
         if self.parent.rustDaVinci.org_img != None:
+            # Always update transparency (this is relatively fast)
             self.parent.rustDaVinci.convert_transparency()
-            self.parent.rustDaVinci.create_pixmaps()
+            
+            # Only recreate pixmaps if settings that affect color processing have changed
+            if reprocess_needed:
+                self.parent.ui.log_TextEdit.append("Reprocessing image due to color-related settings change...")
+                self.parent.rustDaVinci.create_pixmaps()
+                
         if self.parent.is_expanded:
             self.parent.label.hide()
             self.parent.expand_window()
@@ -260,13 +268,10 @@ class Settings(QDialog):
         self.ui.update_canvas_CheckBox.setCheckState(Qt.Checked)
         self.ui.update_canvas_end_CheckBox.setCheckState(Qt.Checked)
         self.ui.draw_lines_CheckBox.setCheckState(Qt.Checked)
-        self.ui.double_click_CheckBox.setCheckState(Qt.Unchecked)
         self.ui.show_info_CheckBox.setCheckState(Qt.Checked)
         self.ui.show_preview_CheckBox.setCheckState(Qt.Unchecked)
         self.ui.hide_preview_CheckBox.setCheckState(Qt.Unchecked)
         self.ui.paint_background_CheckBox.setCheckState(Qt.Unchecked)
-        self.ui.opacities_CheckBox.setCheckState(Qt.Checked)
-        self.ui.hidden_colors_CheckBox.setCheckState(Qt.Unchecked)
 
         # Comboboxes
         self.ui.quality_ComboBox.setCurrentIndex(default_settings["quality"])
@@ -356,7 +361,6 @@ class Settings(QDialog):
             else:
                 self.qpalette.setColor(QPalette.Text, QColor(255, 255, 255))
             self.qpalette.setColor(QPalette.Base, QColor(color[0], color[1], color[2]))
-            self.ui.background_LineEdit.setPalette(self.qpalette)
             hex = rgb_to_hex(color)
             self.ui.background_LineEdit.setText(hex)
 
