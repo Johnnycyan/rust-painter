@@ -2113,6 +2113,7 @@ class rustDaVinci:
         
         # Create a temporary 2D grid representing the image to track processed pixels
         grid = {}
+        processed = set() # Global set to track all processed pixels across all colors
         min_line_width = int(self.settings.value("minimum_line_width", default_settings["minimum_line_width"]))
         
         # Fill the grid with color/opacity information
@@ -2120,11 +2121,19 @@ class rustDaVinci:
         pixels_processed = 0
         start_time = time.time()
         
-        progress_bar.setMaximum(100)
+        # Calculate total work steps for accurate progress tracking
+        color_count = len(color_opacity_map)
+        total_progress_steps = 100
+        grid_building_steps = 20
+        horizontal_line_steps = 40
+        vertical_line_steps = 40
+        
+        progress_bar.setMaximum(total_progress_steps)
         progress_bar.setValue(0)
         progress_status.setText("Building pixel grid...")
         QApplication.processEvents()
         
+        # Step 1: Build the pixel grid - 20% of progress
         for (x, y), layers in self.layered_colors_map.items():
             for color_idx, opacity_idx in layers:
                 if (x, y) not in grid:
@@ -2134,41 +2143,39 @@ class rustDaVinci:
             # Update progress
             pixels_processed += 1
             if pixels_processed % 1000 == 0 or pixels_processed == pixel_count:
-                percent = int((pixels_processed / pixel_count) * 20)  # First 20% of progress
+                percent = int((pixels_processed / pixel_count) * grid_building_steps)
                 progress_bar.setValue(percent)
                 elapsed = time.time() - start_time
-                remaining = (elapsed / percent) * (100 - percent) if percent > 0 else 0
+                remaining = (elapsed / percent) * (total_progress_steps - percent) if percent > 0 else 0
                 elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
                 remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
-                progress_status.setText(f"Building pixel grid: {percent}% complete | " +
+                progress_status.setText(f"Building pixel grid: {int(pixels_processed / pixel_count * 100)}% | " +
                                          f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
                 QApplication.processEvents()
         
         # For each color/opacity combination, find horizontal and vertical lines
-        color_count = len(color_opacity_map)
         colors_processed = 0
+        total_colors = len(color_opacity_map)
         
-        for (color_idx, opacity_idx), count in color_opacity_map.items():
-            # Skip if very few pixels (not worth the effort)
-            if count < min_line_width:
-                continue
+        # Initialize storage for all color/opacity combinations
+        for (color_idx, opacity_idx) in color_opacity_map:
+            precomputed_lines[(color_idx, opacity_idx)] = {
+                'h_lines': [],  # Horizontal lines: [(start_x, y, end_x), ...]
+                'v_lines': [],  # Vertical lines: [(x, start_y, end_y), ...]
+                'points': []    # Individual points: [(x, y), ...]
+            }
+        
+        # Step 2: Find horizontal lines - 40% of progress (grid_building_steps to grid_building_steps+horizontal_line_steps)
+        progress_status.setText("Finding horizontal lines...")
+        QApplication.processEvents()
+        
+        # Process all rows of the canvas
+        for y in range(self.canvas_h):
+            # For each color, check for horizontal lines in this row
+            for (color_idx, opacity_idx), count in color_opacity_map.items():
+                if count < min_line_width:
+                    continue
                 
-            # Initialize storage for this color/opacity combination
-            if (color_idx, opacity_idx) not in precomputed_lines:
-                precomputed_lines[(color_idx, opacity_idx)] = {
-                    'h_lines': [],  # Horizontal lines: [(start_x, y, end_x), ...]
-                    'v_lines': [],  # Vertical lines: [(x, start_y, end_y), ...]
-                    'points': []    # Individual points: [(x, y), ...]
-                }
-                
-            # Track which pixels we've already processed for this color/opacity
-            processed = set()
-            
-            # First pass: Find horizontal lines
-            progress_status.setText(f"Finding horizontal lines for color {colors_processed+1}/{color_count}...")
-            QApplication.processEvents()
-            
-            for y in range(self.canvas_h):
                 x = 0
                 while x < self.canvas_w:
                     # Find start of horizontal line
@@ -2180,11 +2187,11 @@ class rustDaVinci:
                             line_start = x
                             break
                         x += 1
-                        
-                    # No line found, move to next row
+                    
+                    # No line found, move to next position
                     if line_start is None:
                         break
-                        
+                    
                     # Find end of horizontal line
                     line_end = line_start
                     x = line_start + 1
@@ -2204,30 +2211,36 @@ class rustDaVinci:
                         precomputed_lines[(color_idx, opacity_idx)]['h_lines'].append(
                             (line_start, y, line_end)
                         )
-                        # Mark all pixels in this line as processed
+                        # Mark all pixels in this line as processed globally
                         for i in range(line_start, line_end + 1):
                             processed.add((i, y))
                     else:
                         # Line too short, just increment x to look for the next line
                         x = line_end + 1
-                        
-                # Update progress for horizontal lines
-                if y % 20 == 0 or y == self.canvas_h - 1:
-                    h_percent = 20 + int((y / self.canvas_h) * 30)  # 20% to 50% of progress
-                    progress_bar.setValue(h_percent)
-                    elapsed = time.time() - start_time
-                    remaining = (elapsed / h_percent) * (100 - h_percent) if h_percent > 0 else 0
-                    elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
-                    remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
-                    progress_status.setText(f"Finding horizontal lines: {int(y / self.canvas_h * 100)}% | " +
-                                             f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
-                    QApplication.processEvents()
             
-            # Second pass: Find vertical lines
-            progress_status.setText(f"Finding vertical lines for color {colors_processed+1}/{color_count}...")
-            QApplication.processEvents()
-            
-            for x in range(self.canvas_w):
+            # Update progress for horizontal lines - scale from 20% to 60%
+            if y % 10 == 0 or y == self.canvas_h - 1:
+                h_percent = grid_building_steps + int((y / self.canvas_h) * horizontal_line_steps)
+                progress_bar.setValue(h_percent)
+                elapsed = time.time() - start_time
+                remaining = (elapsed / h_percent) * (total_progress_steps - h_percent) if h_percent > 0 else 0
+                elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
+                remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
+                progress_status.setText(f"Finding horizontal lines: {int(y / self.canvas_h * 100)}% | " +
+                                         f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
+                QApplication.processEvents()
+        
+        # Step 3: Find vertical lines - 40% of progress (60% to 100%)
+        progress_status.setText("Finding vertical lines...")
+        QApplication.processEvents()
+        
+        # Process all columns of the canvas
+        for x in range(self.canvas_w):
+            # For each color, check for vertical lines in this column
+            for (color_idx, opacity_idx), count in color_opacity_map.items():
+                if count < min_line_width:
+                    continue
+                
                 y = 0
                 while y < self.canvas_h:
                     # Find start of vertical line
@@ -2239,7 +2252,7 @@ class rustDaVinci:
                             line_start = y
                             break
                         y += 1
-                        
+                    
                     # No line found, move to next column
                     if line_start is None:
                         break
@@ -2263,51 +2276,42 @@ class rustDaVinci:
                         precomputed_lines[(color_idx, opacity_idx)]['v_lines'].append(
                             (x, line_start, line_end)
                         )
-                        # Mark all pixels in this line as processed
+                        # Mark all pixels in this line as processed globally
                         for i in range(line_start, line_end + 1):
                             processed.add((x, i))
                     else:
                         # Line too short, just increment y to look for the next line
                         y = line_end + 1
-                        
-                # Update progress for vertical lines
-                if x % 20 == 0 or x == self.canvas_w - 1:
-                    v_percent = 50 + int((x / self.canvas_w) * 30)  # 50% to 80% of progress
-                    progress_bar.setValue(v_percent)
-                    elapsed = time.time() - start_time
-                    remaining = (elapsed / v_percent) * (100 - v_percent) if v_percent > 0 else 0
-                    elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
-                    remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
-                    progress_status.setText(f"Finding vertical lines: {int(x / self.canvas_w * 100)}% | " +
-                                             f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
-                    QApplication.processEvents()
-                        
-            # Update progress for this color
-            colors_processed += 1
-            progress_status.setText(f"Processing color {colors_processed}/{color_count}...")
-            QApplication.processEvents()
             
-        # Final pass: Store remaining unprocessed pixels as individual points
+            # Update progress for vertical lines - scale from 60% to 100%
+            if x % 10 == 0 or x == self.canvas_w - 1:
+                v_percent = grid_building_steps + horizontal_line_steps + int((x / self.canvas_w) * vertical_line_steps)
+                progress_bar.setValue(v_percent)
+                elapsed = time.time() - start_time
+                remaining = (elapsed / v_percent) * (total_progress_steps - v_percent) if v_percent > 0 else 0
+                elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
+                remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
+                progress_status.setText(f"Finding vertical lines: {int(x / self.canvas_w * 100)}% | " +
+                                         f"Elapsed: {elapsed_str} | Remaining: {remaining_str}")
+                QApplication.processEvents()
+        
+        # Step 4: Collect remaining points
         progress_status.setText("Collecting remaining points...")
-        progress_bar.setValue(80)
+        progress_bar.setValue(95)
         QApplication.processEvents()
         
+        # Find all remaining points for each color
         for (color_idx, opacity_idx) in color_opacity_map:
-            if (color_idx, opacity_idx) not in precomputed_lines:
-                precomputed_lines[(color_idx, opacity_idx)] = {
-                    'h_lines': [],
-                    'v_lines': [],
-                    'points': []
-                }
-                
             pixel_points = []
+            # Check each pixel in the layered colors map
             for (x, y), layers in self.layered_colors_map.items():
+                # If this pixel has this color and hasn't been processed as part of a line, add it as a point
                 if ((color_idx, opacity_idx) in layers and (x, y) not in processed):
                     pixel_points.append((x, y))
-                    
+            
             precomputed_lines[(color_idx, opacity_idx)]['points'] = pixel_points
         
-        # Print statistics
+        # Calculate statistics
         total_horizontal_lines = sum(len(data['h_lines']) for data in precomputed_lines.values())
         total_vertical_lines = sum(len(data['v_lines']) for data in precomputed_lines.values())
         total_points = sum(len(data['points']) for data in precomputed_lines.values())
@@ -2319,8 +2323,8 @@ class rustDaVinci:
         progress_status.setText(f"Optimization complete in {elapsed_str}")
         QApplication.processEvents()
         
-        # Close the progress dialog
-        time.sleep(0.5)  # Short delay so the user can see the completion
+        # Close the progress dialog after a brief delay so the user can see it completed
+        time.sleep(0.5)
         progress_dialog.close()
         
         self.parent.ui.log_TextEdit.append(
