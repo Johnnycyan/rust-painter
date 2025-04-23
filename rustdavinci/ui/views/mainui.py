@@ -13,14 +13,17 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainUI(object):
     def setupUi(self, MainUI):
         MainUI.setObjectName("MainUI")
-        MainUI.resize(240, 450)
-        MainUI.setMinimumSize(QtCore.QSize(240, 450))
-        MainUI.setMaximumSize(QtCore.QSize(240, 450))
+        # Increase the window height to fit both status and log
+        MainUI.resize(240, 530)
+        MainUI.setMinimumSize(QtCore.QSize(240, 530))
+        MainUI.setMaximumSize(QtCore.QSize(240, 530))
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap(":/icons/RustDaVinci-icon.ico"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainUI.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(MainUI)
         self.centralwidget.setObjectName("centralwidget")
+        
+        # Keep the top buttons as they were
         self.load_image_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.load_image_PushButton.setGeometry(QtCore.QRect(10, 10, 220, 45))
         font = QtGui.QFont()
@@ -100,23 +103,64 @@ class Ui_MainUI(object):
         self.line.setFrameShape(QtWidgets.QFrame.HLine)
         self.line.setFrameShadow(QtWidgets.QFrame.Sunken)
         self.line.setObjectName("line")
+        
+        # Add the paint status frame (moved up compared to before)
+        self.paintStatusFrame = QtWidgets.QFrame(self.centralwidget)
+        self.paintStatusFrame.setGeometry(QtCore.QRect(10, 240, 221, 101))
+        self.paintStatusFrame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.paintStatusFrame.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.paintStatusFrame.setObjectName("paintStatusFrame")
+        
+        # Time status labels
+        self.timeStatusLabel = QtWidgets.QLabel(self.paintStatusFrame)
+        self.timeStatusLabel.setGeometry(QtCore.QRect(5, 5, 211, 20))
+        self.timeStatusLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.timeStatusLabel.setObjectName("timeStatusLabel")
+        
+        # Color progress label
+        self.colorProgressLabel = QtWidgets.QLabel(self.paintStatusFrame)
+        self.colorProgressLabel.setGeometry(QtCore.QRect(5, 25, 211, 20))
+        self.colorProgressLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.colorProgressLabel.setObjectName("colorProgressLabel")
+        
+        # Current color swatch frame
+        self.colorSwatchFrame = QtWidgets.QFrame(self.paintStatusFrame)
+        self.colorSwatchFrame.setGeometry(QtCore.QRect(5, 50, 30, 30))
+        self.colorSwatchFrame.setFrameShape(QtWidgets.QFrame.Box)
+        self.colorSwatchFrame.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.colorSwatchFrame.setObjectName("colorSwatchFrame")
+        
+        # Current color information label
+        self.currentColorLabel = QtWidgets.QLabel(self.paintStatusFrame)
+        self.currentColorLabel.setGeometry(QtCore.QRect(40, 50, 176, 30))
+        self.currentColorLabel.setObjectName("currentColorLabel")
+        
+        # Move the log text edit BELOW the status frame (no longer overlapping)
+        self.log_TextEdit = QtWidgets.QTextEdit(self.centralwidget)
+        self.log_TextEdit.setGeometry(QtCore.QRect(10, 350, 221, 101))
+        self.log_TextEdit.setUndoRedoEnabled(False)
+        self.log_TextEdit.setReadOnly(True)
+        self.log_TextEdit.setTextInteractionFlags(QtCore.Qt.NoTextInteraction)
+        self.log_TextEdit.setObjectName("log_TextEdit")
+        
+        # Move the preview button down
         self.preview_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.preview_PushButton.setEnabled(False)
-        self.preview_PushButton.setGeometry(QtCore.QRect(10, 350, 221, 41))
+        self.preview_PushButton.setGeometry(QtCore.QRect(10, 460, 221, 41))
         self.preview_PushButton.setObjectName("preview_PushButton")
+        
+        # Move the progress bar down
         self.progress_ProgressBar = QtWidgets.QProgressBar(self.centralwidget)
-        self.progress_ProgressBar.setGeometry(QtCore.QRect(10, 400, 221, 21))
+        self.progress_ProgressBar.setGeometry(QtCore.QRect(10, 510, 221, 21))
         self.progress_ProgressBar.setProperty("value", 0)
         self.progress_ProgressBar.setTextVisible(False)
         self.progress_ProgressBar.setOrientation(QtCore.Qt.Horizontal)
         self.progress_ProgressBar.setInvertedAppearance(False)
         self.progress_ProgressBar.setObjectName("progress_ProgressBar")
-        self.log_TextEdit = QtWidgets.QTextEdit(self.centralwidget)
-        self.log_TextEdit.setGeometry(QtCore.QRect(10, 240, 221, 101))
-        self.log_TextEdit.setUndoRedoEnabled(False)
-        self.log_TextEdit.setReadOnly(True)
-        self.log_TextEdit.setTextInteractionFlags(QtCore.Qt.NoTextInteraction)
-        self.log_TextEdit.setObjectName("log_TextEdit")
+        
+        # The paint status frame is always visible now
+        # self.paintStatusFrame.hide()  - removed this line
+        
         MainUI.setCentralWidget(self.centralwidget)
         self.statusbar = QtWidgets.QStatusBar(MainUI)
         self.statusbar.setObjectName("statusbar")
@@ -138,4 +182,9 @@ class Ui_MainUI(object):
         self.settings_PushButton.setText(_translate("MainUI", "            Settings              "))
         self.preview_PushButton.setToolTip(_translate("MainUI", "Show Original Image and Preview of the Quantized Images"))
         self.preview_PushButton.setText(_translate("MainUI", "Show Image >>"))
+        
+        # Set default text for the new UI elements
+        self.timeStatusLabel.setText(_translate("MainUI", "Time: 00:00:00 | Remaining: 00:00:00"))
+        self.colorProgressLabel.setText(_translate("MainUI", "Color: 0/0"))
+        self.currentColorLabel.setText(_translate("MainUI", "No color selected"))
 import ui.resources.icons_rc

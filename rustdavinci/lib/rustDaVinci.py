@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSettings, Qt, QRect, QDir
+from PyQt5.QtCore import QSettings, Qt, QRect, QDir, QTimer
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QMessageBox, QInputDialog, QFileDialog, QApplication, QLabel, QProgressBar
 
@@ -98,6 +98,20 @@ class rustDaVinci:
         self.line_delay = 0
         self.ctrl_area_delay = 0
         self.use_double_click = False
+
+        # Color tracking for status display
+        self.total_colors = 0
+        self.current_color_index = 0
+        self.current_color_rgb = None
+        self.current_color_opacity = None
+        self.painting_start_time = 0
+        
+        # Timer for updating status UI during painting
+        self.status_update_timer = None
+        self.current_operation_counter = 0
+        self.current_total_operations = 0
+        self.current_color_key = None
+        self.sorted_color_keys = []
 
         self.background_color = None
         self.skip_colors = None
@@ -482,7 +496,7 @@ class rustDaVinci:
             try:
                 import multiprocessing
                 # Only use parallel processing if we have at least 2 cores and a big enough image
-                if multiprocessing.cpu_count() > 1 and total_pixels > 100000:
+                if multiprocessing.cpu_count() > 1 and total_pixels > 50000:
                     from lib.color_blending import create_layered_colors_map_parallel
                     self.parent.ui.log_TextEdit.append(f"Using parallel processing with {multiprocessing.cpu_count()} cores")
                     self.layered_colors_map = create_layered_colors_map_parallel(
@@ -1411,6 +1425,11 @@ class rustDaVinci:
             self.parent.show()
         self.parent.activateWindow()
 
+        # Stop the status update timer if it's running
+        if self.status_update_timer is not None:
+            self.status_update_timer.stop()
+            self.status_update_timer = None
+
     def choose_painting_controls(self, size, brush, color_idx, opacity_value=None):
         """Choose the paint controls
         
@@ -1822,18 +1841,26 @@ class rustDaVinci:
         listener = keyboard.Listener(on_press=self.key_event)
         listener.start()
         
-        # Paint each color/opacity combination using the precomputed lines
-        for color_key in sorted(precomputed_lines.keys(), key=lambda k: 
-                             len(precomputed_lines[k]['h_lines']) + 
-                             len(precomputed_lines[k]['v_lines']) + 
-                             len(precomputed_lines[k]['d_lines']) + 
-                             len(precomputed_lines[k]['points']), 
-                             reverse=True):
-            
+        # Create a sorted list of color keys based on color index first, then opacity index
+        # This ensures colors are processed in a logical sequential order (1,2,3...) instead of by size
+        sorted_color_keys = sorted(precomputed_lines.keys(), key=lambda k: (k[0], k[1]))
+        self.sorted_color_keys = sorted_color_keys
+        
+        # Start the continuous status update timer
+        self.current_operation_counter = operation_counter
+        self.current_total_operations = total_operations
+        self.start_status_update_timer(sorted_color_keys[0], precomputed_lines, operation_counter, total_operations, start_time)
+        
+        # Paint each color/opacity combination using the precomputed lines in sequential order
+        for color_key in sorted_color_keys:
             color_idx, opacity_idx = color_key
+            
+            # Update the current color key for the timer
+            self.current_color_key = color_key
             
             if self.abort:
                 self.parent.ui.log_TextEdit.append("Aborted...")
+                self.show_log_text()  # Show log instead of status
                 return self.shutdown(listener, start_time, 1)
                 
             if self.skip_current_color:
@@ -1859,6 +1886,10 @@ class rustDaVinci:
                 f"{h_lines_count} horizontal, {v_lines_count} vertical, " +
                 f"{d_lines_count} diagonal lines, {points_count} points"
             )
+            
+            # Update the status UI when switching to a new color
+            self.update_painting_status_ui(color_idx, opacity_idx, color_key, precomputed_lines, 
+                                         operation_counter, total_operations, start_time)
             QApplication.processEvents()
             
             # Set painting controls for this color/opacity
@@ -1871,6 +1902,7 @@ class rustDaVinci:
                     
                 if self.abort:
                     self.parent.ui.log_TextEdit.append("Aborted...")
+                    self.show_log_text()  # Show log instead of status
                     return self.shutdown(listener, start_time, 1)
                     
                 if self.skip_current_color:
@@ -1887,6 +1919,7 @@ class rustDaVinci:
                 # Draw the horizontal line
                 self.draw_line((screen_start_x, screen_y), (screen_end_x, screen_y))
                 operation_counter += 1
+                self.current_operation_counter = operation_counter
                 
                 # Update progress
                 progress_percent = int(operation_counter / total_operations * 100)
@@ -1906,6 +1939,7 @@ class rustDaVinci:
                     
                 if self.abort:
                     self.parent.ui.log_TextEdit.append("Aborted...")
+                    self.show_log_text()  # Show log instead of status
                     return self.shutdown(listener, start_time, 1)
                     
                 if self.skip_current_color:
@@ -1922,12 +1956,18 @@ class rustDaVinci:
                 # Draw the vertical line
                 self.draw_vertical_line((screen_x, screen_start_y), (screen_x, screen_end_y))
                 operation_counter += 1
+                self.current_operation_counter = operation_counter
                 
                 # Update progress
                 progress_percent = int(operation_counter / total_operations * 100)
                 if progress_percent != previous_progress_percent:
                     previous_progress_percent = progress_percent
                     self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+                    # Update painting status every 5% progress change
+                    if progress_percent % 5 == 0:
+                        self.update_painting_status_ui(color_idx, opacity_idx, color_key, 
+                                                    precomputed_lines, operation_counter, 
+                                                    total_operations, start_time)
             
             # Reset skip flag if it was set during vertical lines
             if self.skip_current_color:
@@ -1941,6 +1981,7 @@ class rustDaVinci:
                     
                 if self.abort:
                     self.parent.ui.log_TextEdit.append("Aborted...")
+                    self.show_log_text()  # Show log instead of status
                     return self.shutdown(listener, start_time, 1)
                     
                 if self.skip_current_color:
@@ -1959,12 +2000,18 @@ class rustDaVinci:
                 self.draw_diagonal_line((screen_start_x, screen_start_y), 
                                        (screen_end_x, screen_end_y))
                 operation_counter += 1
+                self.current_operation_counter = operation_counter
                 
                 # Update progress
                 progress_percent = int(operation_counter / total_operations * 100)
                 if progress_percent != previous_progress_percent:
                     previous_progress_percent = progress_percent
                     self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+                    # Update painting status every 5% progress change
+                    if progress_percent % 5 == 0:
+                        self.update_painting_status_ui(color_idx, opacity_idx, color_key, 
+                                                    precomputed_lines, operation_counter, 
+                                                    total_operations, start_time)
             
             # Reset skip flag if it was set during diagonal lines
             if self.skip_current_color:
@@ -1978,6 +2025,7 @@ class rustDaVinci:
                     
                 if self.abort:
                     self.parent.ui.log_TextEdit.append("Aborted...")
+                    self.show_log_text()  # Show log instead of status
                     return self.shutdown(listener, start_time, 1)
                     
                 if self.skip_current_color:
@@ -1990,16 +2038,27 @@ class rustDaVinci:
                 # Paint the individual point
                 self.click_pixel(screen_x, screen_y)
                 operation_counter += 1
+                self.current_operation_counter = operation_counter
                 
                 # Update progress
                 progress_percent = int(operation_counter / total_operations * 100)
                 if progress_percent != previous_progress_percent:
                     previous_progress_percent = progress_percent
                     self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+                    # Update painting status every 5% progress change
+                    if progress_percent % 5 == 0:
+                        self.update_painting_status_ui(color_idx, opacity_idx, color_key, 
+                                                    precomputed_lines, operation_counter, 
+                                                    total_operations, start_time)
             
             # Update canvas after each color using Ctrl+S instead of clicking update button           
             if update_canvas:
                 self.parent.ui.log_TextEdit.append("Updating canvas with Ctrl+S")
+                # Update the UI one more time before switching back to log
+                self.update_painting_status_ui(color_idx, opacity_idx, color_key, 
+                                            precomputed_lines, operation_counter, 
+                                            total_operations, start_time)
+                self.show_log_text()  # Show the log for the canvas update message
                 QApplication.processEvents()
                 pyautogui.hotkey('ctrl', 's')
                 time.sleep(self.ctrl_area_delay)
@@ -2576,3 +2635,133 @@ class rustDaVinci:
                     processed.add((px, py))
         
         return diagonal_lines
+
+    def update_painting_status_ui(self, color_idx, opacity_idx, color_key, precomputed_lines, operation_counter, total_operations, start_time):
+        """Update the painting status UI with current progress information
+        
+        Args:
+            color_idx: Current color index
+            opacity_idx: Current opacity index 
+            color_key: Tuple of (color_idx, opacity_idx)
+            precomputed_lines: Dictionary of precomputed lines
+            operation_counter: Current operation count
+            total_operations: Total operations to complete
+            start_time: Time when painting started
+        """
+        # The status frame should always be visible - no need to hide/show log text
+        # We've redesigned the UI to show both simultaneously
+        
+        # Update the elapsed time and estimated remaining time
+        current_time = time.time()
+        elapsed_time = int(current_time - start_time)
+        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+        
+        # Calculate remaining time based on progress
+        if operation_counter > 0:
+            progress_ratio = operation_counter / total_operations
+            if progress_ratio > 0:
+                remaining_time = int((elapsed_time / progress_ratio) * (1 - progress_ratio))
+                remaining_str = time.strftime("%H:%M:%S", time.gmtime(remaining_time))
+            else:
+                remaining_str = "??:??:??"
+        else:
+            remaining_str = time.strftime("%H:%M:%S", time.gmtime(self.estimated_time))
+        
+        # Update the time status label
+        self.parent.ui.timeStatusLabel.setText(f"Time: {elapsed_str} | Remaining: {remaining_str}")
+        
+        # Calculate current color progress using the sorted color keys for sequential numbering
+        # If we have our sorted color keys list, use it for proper sequential numbering
+        if hasattr(self, 'sorted_color_keys') and self.sorted_color_keys:
+            # Find the current color key in the sorted list
+            try:
+                current_color_num = self.sorted_color_keys.index(color_key) + 1
+            except ValueError:
+                # Fallback if not found
+                current_color_num = list(precomputed_lines.keys()).index(color_key) + 1
+        else:
+            # Fallback to previous method if sorted keys not available
+            current_color_num = list(precomputed_lines.keys()).index(color_key) + 1
+        
+        total_colors = len(precomputed_lines)
+        self.parent.ui.colorProgressLabel.setText(f"Color: {current_color_num}/{total_colors}")
+        
+        # Update the color swatch with current color
+        if color_idx < len(self.base_palette_colors):
+            rgb_color = self.base_palette_colors[color_idx]
+            hex_color = rgb_to_hex(rgb_color)
+            opacity_percent = int(self.opacity_values[opacity_idx] * 100)
+            
+            # Set the background color of the swatch frame
+            self.parent.ui.colorSwatchFrame.setStyleSheet(f"background-color: {hex_color};")
+            
+            # Update the color info label
+            self.parent.ui.currentColorLabel.setText(f"{hex_color}\nOpacity: {opacity_percent}%")
+        
+        # Process UI events
+        QApplication.processEvents()
+
+    def show_log_text(self):
+        """Show the log text and hide the status frame"""
+        if self.parent.ui.paintStatusFrame.isVisible():
+            self.parent.ui.paintStatusFrame.hide()
+            self.parent.ui.log_TextEdit.show()
+            QApplication.processEvents()
+
+    def start_status_update_timer(self, color_key, precomputed_lines, operation_counter, total_operations, start_time):
+        """Start a timer to continuously update the status UI during painting
+        
+        Args:
+            color_key: Current (color_idx, opacity_idx) tuple
+            precomputed_lines: Dictionary of precomputed lines
+            operation_counter: Current operation count
+            total_operations: Total operations to complete
+            start_time: Time when painting started
+        """
+        # Store the current state information for timer updates
+        self.current_color_key = color_key
+        self.current_operation_counter = operation_counter
+        self.current_total_operations = total_operations
+        self.precomputed_lines = precomputed_lines
+        
+        # Stop existing timer if running
+        if self.status_update_timer is not None:
+            self.status_update_timer.stop()
+        
+        # Create and start a new timer
+        self.status_update_timer = QTimer(self.parent)
+        self.status_update_timer.timeout.connect(lambda: self.update_status_from_timer(start_time))
+        self.status_update_timer.start(1000)  # Update every second
+        
+    def update_status_from_timer(self, start_time):
+        """Update the status UI from the timer callback"""
+        if self.current_color_key is None:
+            return
+            
+        color_idx, opacity_idx = self.current_color_key
+        
+        # Update the elapsed time and estimated remaining time
+        current_time = time.time()
+        elapsed_time = int(current_time - start_time)
+        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+        
+        # Calculate remaining time based on progress
+        if self.current_operation_counter > 0:
+            progress_ratio = self.current_operation_counter / self.current_total_operations
+            if progress_ratio > 0:
+                remaining_time = int((elapsed_time / progress_ratio) * (1 - progress_ratio))
+                remaining_str = time.strftime("%H:%M:%S", time.gmtime(remaining_time))
+            else:
+                remaining_str = "??:??:??"
+        else:
+            remaining_str = time.strftime("%H:%M:%S", time.gmtime(self.estimated_time))
+        
+        # Update the time status label
+        self.parent.ui.timeStatusLabel.setText(f"Time: {elapsed_str} | Remaining: {remaining_str}")
+        
+        # Update progress bar with current progress
+        progress_percent = int((self.current_operation_counter / self.current_total_operations) * 100)
+        self.parent.ui.progress_ProgressBar.setValue(progress_percent)
+        
+        # Process UI events
+        QApplication.processEvents()
