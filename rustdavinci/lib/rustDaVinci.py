@@ -1377,6 +1377,9 @@ class rustDaVinci:
         if state == 0:
             self.parent.ui.progress_ProgressBar.setValue(100)
 
+        # Clear the last used color/brush/opacity settings
+        self.clear_last_painting_settings()
+
         if bool(
             self.settings.value("window_topmost", default_settings["window_topmost"])
         ):
@@ -1741,7 +1744,7 @@ class rustDaVinci:
             
             # Find the background color index in our base colors
             background_idx = -1
-            for i, color in enumerate(self.base_palette_colors):
+            for i, color in self.base_palette_colors:
                 if color == bg_color_rgb:
                     background_idx = i
                     break
@@ -2333,3 +2336,13 @@ class rustDaVinci:
         )
         
         return precomputed_lines
+
+    def clear_last_painting_settings(self):
+        """Clears the last used color/brush/opacity settings.
+        Called when a painting is finished, aborted, or canceled in any way.
+        """
+        self.parent.ui.log_TextEdit.append("Clearing last used painting settings...")
+        self.current_ctrl_size = None
+        self.current_ctrl_brush = None
+        self.current_ctrl_opacity = None
+        self.current_ctrl_color = None
