@@ -53,8 +53,7 @@ class rustDaVinci:
         # Pixmaps
         self.pixmap_on_display = 0
         self.org_img_pixmap = None
-        self.quantized_img_pixmap_normal = None
-        self.quantized_img_pixmap_high = None
+        self.quantized_img_pixmap = None  # Single pixmap instead of normal/high variants
 
         # Booleans
         self.org_img_ok = False
@@ -600,8 +599,7 @@ class rustDaVinci:
             os.remove("temp_optimized.png")
             
             # Use the same high-quality optimized image for both normal and high quality
-            self.quantized_img_pixmap_normal = optimized_pixmap
-            self.quantized_img_pixmap_high = optimized_pixmap
+            self.quantized_img_pixmap = optimized_pixmap
             
             self.org_img_ok = True
             self.parent.ui.log_TextEdit.append("Image processed with optimal color layering.")
@@ -609,8 +607,7 @@ class rustDaVinci:
             print(f"Error creating pixmaps: {str(e)}")
             self.org_img_ok = False
             # Set the pixmaps to None to prevent further crashes
-            self.quantized_img_pixmap_normal = None
-            self.quantized_img_pixmap_high = None
+            self.quantized_img_pixmap = None
 
     def convert_img(self):
         """Convert the image to fit the canvas and quantize the image.

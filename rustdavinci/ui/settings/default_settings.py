@@ -4,7 +4,7 @@
 
 default_settings = {
     "window_topmost": 1,
-    "quality": 0,
+    # quality setting removed as we now only have one quality option
     "ctrl_x": 0,
     "ctrl_y": 0,
     "ctrl_w": 0,

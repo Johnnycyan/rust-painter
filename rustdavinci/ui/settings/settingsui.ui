@@ -63,48 +63,7 @@
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
-    <widget class="QComboBox" name="quality_ComboBox">
-     <property name="geometry">
-      <rect>
-       <x>180</x>
-       <y>40</y>
-       <width>171</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="toolTip">
-      <string>The painting quality</string>
-     </property>
-     <property name="currentText">
-      <string>Normal</string>
-     </property>
-     <property name="currentIndex">
-      <number>0</number>
-     </property>
-     <item>
-      <property name="text">
-       <string>Normal</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>High</string>
-      </property>
-     </item>
-    </widget>
-    <widget class="QLabel" name="label_1">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>40</y>
-       <width>161</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Painting Quality:</string>
-     </property>
-    </widget>
+    <!-- Quality ComboBox and label removed as we now only have one quality option -->
     <widget class="QLabel" name="label_4">
      <property name="geometry">
       <rect>
@@ -698,11 +657,10 @@ Colors</string>
       </rect>
      </property>
      <property name="toolTip">
-      <string>This will automatically show the preview based on the quality setting when loading a new image</string>
+      <string>This will automatically show the preview when loading a new image</string>
      </property>
      <property name="text">
-      <string>Automatically show painting preview based on the quality setting
-when loading new image</string>
+      <string>Automatically show painting preview when loading new image</string>
      </property>
      <property name="checked">
       <bool>true</bool>

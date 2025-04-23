@@ -117,8 +117,7 @@ class MainWindow(QMainWindow):
             if self.label is not None:
                 self.label.hide()
                 self.show_original_PushButton.hide()
-                self.show_normal_PushButton.hide()
-                self.show_high_PushButton.hide()
+                self.show_processed_PushButton.hide()
         else:
             self.expand_window()
 
@@ -140,55 +139,38 @@ class MainWindow(QMainWindow):
 
         if self.rustDaVinci.pixmap_on_display == 0:
             pixmap = self.rustDaVinci.org_img_pixmap
-        elif self.rustDaVinci.pixmap_on_display == 1:
-            pixmap = self.rustDaVinci.quantized_img_pixmap_normal
-        elif self.rustDaVinci.pixmap_on_display == 2:
-            pixmap = self.rustDaVinci.quantized_img_pixmap_high
+        else:
+            # There's only one processed image quality now
+            pixmap = self.rustDaVinci.quantized_img_pixmap
 
         pixmap = pixmap.scaled(550, 380, Qt.KeepAspectRatio)
         self.label.setAlignment(Qt.AlignCenter)
         self.label.setPixmap(pixmap)
 
         self.show_original_PushButton = QPushButton("Original", self)
-        self.show_original_PushButton.setGeometry(QRect(240, 400, 180, 21))
+        self.show_original_PushButton.setGeometry(QRect(240, 400, 275, 21))
         self.show_original_PushButton.show()
         self.show_original_PushButton.clicked.connect(self.show_original_pixmap)
 
-        self.show_normal_PushButton = QPushButton("Normal", self)
-        self.show_normal_PushButton.setGeometry(QRect(425, 400, 180, 21))
-        self.show_normal_PushButton.show()
-        self.show_normal_PushButton.clicked.connect(self.show_normal_pixmap)
-
-        self.show_high_PushButton = QPushButton("High", self)
-        self.show_high_PushButton.setGeometry(QRect(610, 400, 180, 21))
-        self.show_high_PushButton.show()
-        self.show_high_PushButton.clicked.connect(self.show_high_pixmap)
+        self.show_processed_PushButton = QPushButton("Processed", self)
+        self.show_processed_PushButton.setGeometry(QRect(515, 400, 275, 21))
+        self.show_processed_PushButton.show()
+        self.show_processed_PushButton.clicked.connect(self.show_processed_pixmap)
 
     def show_original_pixmap(self):
         """Show the original quality pixmap"""
         self.rustDaVinci.pixmap_on_display = 0
         self.label.hide()
         self.show_original_PushButton.hide()
-        self.show_normal_PushButton.hide()
-        self.show_high_PushButton.hide()
+        self.show_processed_PushButton.hide()
         self.expand_window()
 
-    def show_normal_pixmap(self):
-        """Show the normal quality pixmap"""
+    def show_processed_pixmap(self):
+        """Show the processed image pixmap"""
         self.rustDaVinci.pixmap_on_display = 1
         self.label.hide()
         self.show_original_PushButton.hide()
-        self.show_normal_PushButton.hide()
-        self.show_high_PushButton.hide()
-        self.expand_window()
-
-    def show_high_pixmap(self):
-        """Show the high quality pixmap"""
-        self.rustDaVinci.pixmap_on_display = 2
-        self.label.hide()
-        self.show_original_PushButton.hide()
-        self.show_normal_PushButton.hide()
-        self.show_high_PushButton.hide()
+        self.show_processed_PushButton.hide()
         self.expand_window()
 
     def show(self):
