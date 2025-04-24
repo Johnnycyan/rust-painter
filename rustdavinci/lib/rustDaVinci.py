@@ -1267,19 +1267,35 @@ class rustDaVinci:
         Updates:    Estimated time for clicking and lines
                     Estimated time for only clicking
         """
+        # Base time factors
         one_click_time = self.click_delay + 0.001
         one_line_time = (self.line_delay * 5) + 0.0035
+        
+        # Calculate control setting time - this stays the same
         set_paint_controls_time = (
             len(self.img_colors) * ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
         ) + ((2 * self.click_delay) + (2 * self.ctrl_area_delay))
-        est_time_lines = int(
+        
+        # Calculate raw painting time
+        raw_est_time_lines = int(
             (self.pixels * one_click_time)
             + (self.lines * one_line_time)
             + set_paint_controls_time
         )
-        est_time_click = int(
+        raw_est_time_click = int(
             (self.tot_pixels * one_click_time) + set_paint_controls_time
         )
+        
+        # Add system overhead and performance factors (based on real-world observations)
+        # Using a scaling factor of approximately 1.75x for realistic estimation
+        performance_factor = 1.75
+        
+        # Additional overhead per color change (UI responsiveness, etc.)
+        color_change_overhead = len(self.img_colors) * 1.2  # seconds per color
+        
+        # Apply performance factor and add overhead
+        est_time_lines = int((raw_est_time_lines * performance_factor) + color_change_overhead)
+        est_time_click = int((raw_est_time_click * performance_factor) + color_change_overhead)
 
         if not bool(self.settings.value("draw_lines", default_settings["draw_lines"])):
             self.prefer_lines = False
@@ -1290,6 +1306,10 @@ class rustDaVinci:
         else:
             self.prefer_lines = False
             self.estimated_time = est_time_click
+            
+        # Log the estimation details
+        self.parent.ui.log_TextEdit.append(f"Time estimation: {time.strftime('%H:%M:%S', time.gmtime(self.estimated_time))}")
+        self.parent.ui.log_TextEdit.append(f"(Includes {len(self.img_colors)} color changes and system overhead)")
 
     def click_pixel(self, x=0, y=0):
         """Click the pixel"""
