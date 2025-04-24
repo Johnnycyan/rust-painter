@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSize, QSettings
+from PyQt5.QtCore import QSize
 from PyQt5.QtGui import QMovie, QPainter, QFont
 from PyQt5.QtWidgets import QDialog, QLabel, QPushButton
 
 from ui.theme.theme import apply_theme_to_dialog
-from ui.settings.default_settings import default_settings
 
 
 class CaptureAreaDialog(QDialog):

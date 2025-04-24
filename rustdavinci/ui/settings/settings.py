@@ -5,15 +5,13 @@ from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtWidgets import QDialog, QColorDialog, QListWidgetItem
 
-import sys
-
 from ui.settings.default_settings import default_settings
 from ui.settings.settingsui import Ui_SettingsUI
 from lib.color_functions import hex_to_rgb, rgb_to_hex, closest_color
 from lib.captureArea import show_area
 from ui.dialogs.colors.colors import Colors
 from ui.dialogs.click_color.click_color import Click_Color
-from ui.theme.theme import toggle_theme, apply_theme
+from ui.theme.theme import  apply_theme
 
 
 class Settings(QDialog):
@@ -177,8 +175,10 @@ class Settings(QDialog):
     def setting_to_checkbox(self, name, checkBox, default):
         """ Settings integer values converted to checkbox """
         val = int(self.settings.value(name, default))
-        if val: checkBox.setCheckState(Qt.Checked)
-        else: checkBox.setCheckState(Qt.Unchecked)
+        if val:
+            checkBox.setCheckState(Qt.Checked)
+        else:
+            checkBox.setCheckState(Qt.Unchecked)
 
 
     def saveSettings(self):
@@ -242,7 +242,7 @@ class Settings(QDialog):
         self.parent.rustDaVinci.update()
 
         # Only reprocess image if necessary settings changed
-        if self.parent.rustDaVinci.org_img != None:
+        if self.parent.rustDaVinci.org_img is not None:
             # Always update transparency (this is relatively fast)
             self.parent.rustDaVinci.convert_transparency()
             
@@ -266,8 +266,10 @@ class Settings(QDialog):
 
     def checkbox_to_setting(self, name, val):
         """ Settings save checkbox to integer """
-        if val: self.settings.setValue(name, 1)
-        else: self.settings.setValue(name, 0)
+        if val:
+            self.settings.setValue(name, 1)
+        else:
+            self.settings.setValue(name, 0)
 
 
     def default_clicked(self):
@@ -330,7 +332,8 @@ class Settings(QDialog):
 
     def ok_clicked(self):
         """ Save and quit settings. """
-        if self.isSettingsChanged: self.saveSettings()
+        if self.isSettingsChanged:
+            self.saveSettings()
         self.close()
 
 
@@ -405,7 +408,8 @@ class Settings(QDialog):
     def remove_skip_color_clicked(self):
         """ Remove a color from skip_colors """
         listItems = self.ui.skip_colors_ListWidget.selectedItems()
-        if not listItems: return
+        if not listItems:
+            return
         for item in listItems:
             self.ui.skip_colors_ListWidget.takeItem(self.ui.skip_colors_ListWidget.row(item))
             self.enableApply()

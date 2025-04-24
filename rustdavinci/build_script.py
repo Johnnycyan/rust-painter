@@ -33,7 +33,7 @@ def copy_content(src, dst, symlinks=False, ignore=None):
 def move_content(srcDir, dstDir):
     """ Move content from a given folder to a destination folder """
     for filePath in glob.glob(srcDir + '\*'):
-        shutil.move(filePath, dstDir);
+        shutil.move(filePath, dstDir)
 
 
 def main():
