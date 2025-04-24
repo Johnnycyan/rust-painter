@@ -63,7 +63,43 @@
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
-    <!-- Quality ComboBox and label removed as we now only have one quality option -->
+    <!-- Theme Selection ComboBox -->
+    <widget class="QComboBox" name="theme_ComboBox">
+     <property name="geometry">
+      <rect>
+       <x>180</x>
+       <y>15</y>
+       <width>171</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="toolTip">
+      <string>Select application theme</string>
+     </property>
+     <item>
+      <property name="text">
+       <string>Dark</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Light</string>
+      </property>
+     </item>
+    </widget>
+    <widget class="QLabel" name="label_theme">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>15</y>
+       <width>161</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Application Theme:</string>
+     </property>
+    </widget>
     <widget class="QLabel" name="label_4">
      <property name="geometry">
       <rect>

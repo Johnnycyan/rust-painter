@@ -361,7 +361,10 @@ class rustDaVinci:
                 new_width = int(temp_img.width * factor)
                 new_height = int(temp_img.height * factor)
                 
+                from ui.theme.theme import apply_theme_to_dialog
+                
                 msg = QMessageBox(self.parent)
+                apply_theme_to_dialog(msg)  # Apply current theme to dialog
                 msg.setIcon(QMessageBox.Question)
                 msg.setWindowTitle("Large Image Detected")
                 msg.setText(f"This image is very large ({temp_img.width}x{temp_img.height} = {total_pixels:,} pixels).")
@@ -383,9 +386,11 @@ class rustDaVinci:
             
             # Create a much larger custom dialog for progress display instead of using QMessageBox
             from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+            from ui.theme.theme import apply_theme_to_dialog
             
             # Create custom dialog with proper size
             self.progress_dialog = QDialog(self.parent)
+            apply_theme_to_dialog(self.progress_dialog)  # Apply the current theme
             self.progress_dialog.setWindowTitle("Calculating Optimal Colors")
             self.progress_dialog.setMinimumWidth(600)  # Much wider dialog
             self.progress_dialog.setMinimumHeight(200) # Much taller dialog
@@ -1737,7 +1742,7 @@ class rustDaVinci:
 
         # Add label info about pause, skip and abort keys
         self.hotkey_label = QLabel(self.parent)
-        self.hotkey_label.setGeometry(QRect(10, 425, 221, 21))
+        self.hotkey_label.setGeometry(QRect(10, 559, 221, 21))
         self.hotkey_label.setText(
             self.pause_key
             + " = Pause        "
@@ -2175,9 +2180,11 @@ class rustDaVinci:
         
         # Create a progress dialog similar to the one used for color calculation
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+        from ui.theme.theme import apply_theme_to_dialog
         
         # Create custom dialog with proper size
         progress_dialog = QDialog(self.parent)
+        apply_theme_to_dialog(progress_dialog)  # Apply current theme
         progress_dialog.setWindowTitle("Calculating Line Optimizations")
         progress_dialog.setMinimumWidth(600)  # Wide dialog
         progress_dialog.setMinimumHeight(180) # Tall dialog
@@ -2623,9 +2630,11 @@ class rustDaVinci:
             total_operations: Total operations to complete
             start_time: Time when painting started
         """
-        # The status frame should always be visible - no need to hide/show log text
-        # We've redesigned the UI to show both simultaneously
-        
+        # Make sure the status frame is visible
+        if not self.parent.ui.paintStatusFrame.isVisible():
+            self.parent.ui.log_TextEdit.hide()
+            self.parent.ui.paintStatusFrame.show()
+            
         # Update the elapsed time and estimated remaining time
         current_time = time.time()
         elapsed_time = int(current_time - start_time)
@@ -2678,10 +2687,11 @@ class rustDaVinci:
 
     def show_log_text(self):
         """Show the log text and hide the status frame"""
-        if self.parent.ui.paintStatusFrame.isVisible():
-            self.parent.ui.paintStatusFrame.hide()
+        # Don't hide the status frame - that's causing the jumping
+        # Just ensure both are visible, with the status frame above the log
+        if not self.parent.ui.log_TextEdit.isVisible():
             self.parent.ui.log_TextEdit.show()
-            QApplication.processEvents()
+        QApplication.processEvents()
 
     def start_status_update_timer(self, color_key, precomputed_lines, operation_counter, total_operations, start_time):
         """Start a timer to continuously update the status UI during painting

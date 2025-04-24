@@ -31,5 +31,7 @@ default_settings = {
     "use_diagonal_lines": 1,      # Enable diagonal line detection (greatly improves efficiency)
     # New cache settings
     "use_cached_data": 1,         # Whether to use cached color calculations if available
-    "auto_save_cache": 1          # Whether to automatically save color calculations to cache
+    "auto_save_cache": 1,         # Whether to automatically save color calculations to cache
+    # Theme settings
+    "theme": "dark",              # Default theme ("dark" or "light")
 }

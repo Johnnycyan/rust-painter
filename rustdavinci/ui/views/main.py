@@ -69,6 +69,10 @@ class MainWindow(QMainWindow):
         if self.is_expanded:
             self.label.hide()
             self.expand_window()
+        # Ensure window height is maintained
+        if self.height() < 580:
+            self.setMinimumHeight(580)
+            self.resize(self.width(), 580)
 
     def load_image_URL_clicked(self):
         """Load image from URL"""
@@ -79,6 +83,10 @@ class MainWindow(QMainWindow):
         if self.is_expanded:
             self.label.hide()
             self.expand_window()
+        # Ensure window height is maintained
+        if self.height() < 580:
+            self.setMinimumHeight(580)
+            self.resize(self.width(), 580)
 
     def clear_image_clicked(self):
         """Clear the current image"""
@@ -111,9 +119,9 @@ class MainWindow(QMainWindow):
         if self.is_expanded:
             self.ui.preview_PushButton.setText("Show Image >>")
             self.is_expanded = False
-            self.setMinimumSize(QSize(240, 450))
-            self.setMaximumSize(QSize(240, 450))
-            self.resize(240, 450)
+            self.setMinimumSize(QSize(240, 580))
+            self.setMaximumSize(QSize(240, 580))
+            self.resize(240, 580)
             if self.label is not None:
                 self.label.hide()
                 self.show_original_PushButton.hide()
@@ -127,9 +135,13 @@ class MainWindow(QMainWindow):
 
         self.ui.preview_PushButton.setText("<< Hide Image")
 
-        self.setMinimumSize(QSize(800, 450))
-        self.setMaximumSize(QSize(800, 450))
-        self.resize(800, 450)
+        # Set fixed size constraints
+        self.setMinimumSize(QSize(800, 580))
+        self.setMaximumSize(QSize(800, 580))
+        self.resize(800, 580)
+        
+        # Force minimum height to ensure log_TextEdit and progress_ProgressBar remain visible
+        self.setMinimumHeight(580)
 
         self.label = QLabel(self)
         self.label.setGeometry(QRect(240, 10, 550, 380))
@@ -164,6 +176,10 @@ class MainWindow(QMainWindow):
         self.show_original_PushButton.hide()
         self.show_processed_PushButton.hide()
         self.expand_window()
+        # Additional height enforcement
+        if self.height() < 580:
+            self.setMinimumHeight(580)
+            self.resize(self.width(), 580)
 
     def show_processed_pixmap(self):
         """Show the processed image pixmap"""
@@ -172,6 +188,10 @@ class MainWindow(QMainWindow):
         self.show_original_PushButton.hide()
         self.show_processed_PushButton.hide()
         self.expand_window()
+        # Additional height enforcement
+        if self.height() < 580:
+            self.setMinimumHeight(580)
+            self.resize(self.width(), 580)
 
     def show(self):
         """Show the main window"""

@@ -36,7 +36,7 @@ NOTE: Only tested on Windows 10
 ## How it works
 
 1. Click the "Load Image..." button and select an image from disk or URL
-2. Click the "Show Image >>" button to get a preview of how the canvas will look when the painting process is done. There are three buttons when the preview is shown, "Original" which shows the original image, "Normal" that shows the normal quality outcome and "High" which shows the outcome of the high quality dithering algorithm.
+2. Click the "Show Image >>" button to get a preview of how the canvas will look when the painting process is done. There are two buttons when the preview is shown, "Original" which shows the original image, and "Processed" which shows the outcome of the dithering algorithm.
 3. You can also open settings while the preview is shown to modify things such as "Use the hidden colors palette" and "Improve paintings by utilizing different brush opacities" and immediately see the impact on the preview.
 4. When you are satisfied with the settings you can go ahead and click the button "Capture Control Area". This will give you two alternatives, either capture it manually (shown in the gifs below), or capture it automatically using openCV.
 5. When the paint control area is captured you can go ahead and click the "Paint Image". This will prompt you to capture the area in which the canvas is located. It's the same procedure as with manually capturing the paint controls area. After that, Rust Painter will calculate things such as estimated time, amount of pixels to paint, lines to paint, dimensions of the canvas and finaly give you the option to start painting.

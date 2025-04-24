@@ -13,6 +13,7 @@ from lib.color_functions import hex_to_rgb, rgb_to_hex, closest_color
 from lib.captureArea import show_area
 from ui.dialogs.colors.colors import Colors
 from ui.dialogs.click_color.click_color import Click_Color
+from ui.theme.theme import toggle_theme, apply_theme
 
 
 class Settings(QDialog):
@@ -79,7 +80,7 @@ class Settings(QDialog):
         self.ui.paint_background_CheckBox.stateChanged.connect(self.enableApply)
 
         # Comboboxes
-        self.ui.quality_ComboBox.currentIndexChanged.connect(self.enableApply)
+        self.ui.theme_ComboBox.currentIndexChanged.connect(self.enableApply)
         self.ui.brush_type_ComboBox.currentIndexChanged.connect(self.enableApply)
 
         # Lineedits
@@ -105,6 +106,11 @@ class Settings(QDialog):
 
     def loadSettings(self):
         """ Load the saved settings or the default settings. """
+        # Theme setting
+        current_theme = self.settings.value("theme", default_settings["theme"])
+        theme_index = 0 if current_theme.lower() == "dark" else 1
+        self.ui.theme_ComboBox.setCurrentIndex(theme_index)
+        
         # Checkboxes
         self.setting_to_checkbox("window_topmost", self.ui.topmost_CheckBox, default_settings["window_topmost"])
         self.setting_to_checkbox("skip_background_color", self.ui.skip_background_CheckBox, default_settings["skip_background_color"])
@@ -115,10 +121,7 @@ class Settings(QDialog):
         self.setting_to_checkbox("show_preview_load", self.ui.show_preview_CheckBox, default_settings["show_preview_load"])
         self.setting_to_checkbox("hide_preview_paint", self.ui.hide_preview_CheckBox, default_settings["hide_preview_paint"])
         self.setting_to_checkbox("paint_background", self.ui.paint_background_CheckBox, default_settings["paint_background"])
-
-        # Comboboxes
-        index = self.settings.value("quality", default_settings["quality"])
-        self.ui.quality_ComboBox.setCurrentIndex(index)
+            
         index = self.settings.value("brush_type", default_settings["brush_type"])
         self.ui.brush_type_ComboBox.setCurrentIndex(index)
 
@@ -184,6 +187,15 @@ class Settings(QDialog):
         reprocess_needed = False
         prev_background_color = self.settings.value("background_color", default_settings["background_color"])
         
+        # Theme setting
+        theme_value = "dark" if self.ui.theme_ComboBox.currentIndex() == 0 else "light"
+        prev_theme = self.settings.value("theme", default_settings["theme"])
+        self.settings.setValue("theme", theme_value)
+        
+        # If theme changed, apply it
+        if prev_theme != theme_value:
+            apply_theme()
+        
         # Checkboxes
         self.checkbox_to_setting("window_topmost", self.ui.topmost_CheckBox.isChecked())
         self.checkbox_to_setting("skip_background_color", self.ui.skip_background_CheckBox.isChecked())
@@ -194,9 +206,7 @@ class Settings(QDialog):
         self.checkbox_to_setting("show_preview_load", self.ui.show_preview_CheckBox.isChecked())
         self.checkbox_to_setting("hide_preview_paint", self.ui.hide_preview_CheckBox.isChecked())
         self.checkbox_to_setting("paint_background", self.ui.paint_background_CheckBox.isChecked())
-
-        # Comboboxes
-        self.settings.setValue("quality", self.ui.quality_ComboBox.currentIndex())
+            
         self.settings.setValue("brush_type", self.ui.brush_type_ComboBox.currentIndex())
 
         #  Lineedits
@@ -262,6 +272,10 @@ class Settings(QDialog):
 
     def default_clicked(self):
         """ Set everything to the default values. """
+        # Theme setting
+        theme_index = 0  # Dark theme is default
+        self.ui.theme_ComboBox.setCurrentIndex(theme_index)
+        
         # Checkboxes
         self.ui.topmost_CheckBox.setCheckState(Qt.Checked)
         self.ui.skip_background_CheckBox.setCheckState(Qt.Checked)
@@ -272,9 +286,7 @@ class Settings(QDialog):
         self.ui.show_preview_CheckBox.setCheckState(Qt.Unchecked)
         self.ui.hide_preview_CheckBox.setCheckState(Qt.Unchecked)
         self.ui.paint_background_CheckBox.setCheckState(Qt.Unchecked)
-
-        # Comboboxes
-        self.ui.quality_ComboBox.setCurrentIndex(default_settings["quality"])
+            
         self.ui.brush_type_ComboBox.setCurrentIndex(default_settings["brush_type"])
 
         # Lineedits
@@ -312,6 +324,8 @@ class Settings(QDialog):
                 else:
                     i.setForeground(QColor(255, 255, 255))
                 self.ui.skip_colors_ListWidget.addItem(i)
+
+        self.enableApply()
 
 
     def ok_clicked(self):

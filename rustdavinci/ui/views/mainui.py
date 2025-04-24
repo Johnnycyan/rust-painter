@@ -13,17 +13,17 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainUI(object):
     def setupUi(self, MainUI):
         MainUI.setObjectName("MainUI")
-        # Increase the window height to fit both status and log
-        MainUI.resize(240, 530)
-        MainUI.setMinimumSize(QtCore.QSize(240, 530))
-        MainUI.setMaximumSize(QtCore.QSize(240, 530))
+        # Increase the window height from 560 to 580 to ensure the log box isn't cut off
+        MainUI.resize(240, 580)
+        MainUI.setMinimumSize(QtCore.QSize(240, 580))
+        MainUI.setMaximumSize(QtCore.QSize(240, 580))
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap(":/icons/RustDaVinci-icon.ico"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainUI.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(MainUI)
         self.centralwidget.setObjectName("centralwidget")
         
-        # Keep the top buttons as they were
+        # Top buttons - keep as they were
         self.load_image_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.load_image_PushButton.setGeometry(QtCore.QRect(10, 10, 220, 45))
         font = QtGui.QFont()
@@ -53,6 +53,7 @@ class Ui_MainUI(object):
         self.load_image_PushButton.setDefault(False)
         self.load_image_PushButton.setFlat(True)
         self.load_image_PushButton.setObjectName("load_image_PushButton")
+        
         self.identify_ctrl_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.identify_ctrl_PushButton.setGeometry(QtCore.QRect(10, 60, 220, 45))
         font = QtGui.QFont()
@@ -68,6 +69,7 @@ class Ui_MainUI(object):
         self.identify_ctrl_PushButton.setIconSize(QtCore.QSize(220, 45))
         self.identify_ctrl_PushButton.setFlat(True)
         self.identify_ctrl_PushButton.setObjectName("identify_ctrl_PushButton")
+        
         self.paint_image_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.paint_image_PushButton.setEnabled(False)
         self.paint_image_PushButton.setGeometry(QtCore.QRect(10, 110, 220, 45))
@@ -84,6 +86,7 @@ class Ui_MainUI(object):
         self.paint_image_PushButton.setIconSize(QtCore.QSize(220, 45))
         self.paint_image_PushButton.setFlat(True)
         self.paint_image_PushButton.setObjectName("paint_image_PushButton")
+        
         self.settings_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.settings_PushButton.setGeometry(QtCore.QRect(10, 160, 220, 45))
         font = QtGui.QFont()
@@ -98,13 +101,15 @@ class Ui_MainUI(object):
         self.settings_PushButton.setIconSize(QtCore.QSize(220, 45))
         self.settings_PushButton.setFlat(True)
         self.settings_PushButton.setObjectName("settings_PushButton")
+        
         self.line = QtWidgets.QFrame(self.centralwidget)
         self.line.setGeometry(QtCore.QRect(17, 220, 201, 16))
         self.line.setFrameShape(QtWidgets.QFrame.HLine)
         self.line.setFrameShadow(QtWidgets.QFrame.Sunken)
         self.line.setObjectName("line")
         
-        # Add the paint status frame (moved up compared to before)
+        # Keep both paint status frame and log text area visible at the same time
+        # The paint status frame (Now showing above the text log area)
         self.paintStatusFrame = QtWidgets.QFrame(self.centralwidget)
         self.paintStatusFrame.setGeometry(QtCore.QRect(10, 240, 221, 101))
         self.paintStatusFrame.setFrameShape(QtWidgets.QFrame.StyledPanel)
@@ -135,31 +140,29 @@ class Ui_MainUI(object):
         self.currentColorLabel.setGeometry(QtCore.QRect(40, 50, 176, 30))
         self.currentColorLabel.setObjectName("currentColorLabel")
         
-        # Move the log text edit BELOW the status frame (no longer overlapping)
+        # Increase the height of the log text area from 101 to 120 pixels
+        # to make sure the bottom isn't cut off
         self.log_TextEdit = QtWidgets.QTextEdit(self.centralwidget)
-        self.log_TextEdit.setGeometry(QtCore.QRect(10, 350, 221, 101))
+        self.log_TextEdit.setGeometry(QtCore.QRect(10, 350, 221, 120))
         self.log_TextEdit.setUndoRedoEnabled(False)
         self.log_TextEdit.setReadOnly(True)
         self.log_TextEdit.setTextInteractionFlags(QtCore.Qt.NoTextInteraction)
         self.log_TextEdit.setObjectName("log_TextEdit")
         
-        # Move the preview button down
+        # Move the preview button down to accommodate the taller log text area
         self.preview_PushButton = QtWidgets.QPushButton(self.centralwidget)
         self.preview_PushButton.setEnabled(False)
-        self.preview_PushButton.setGeometry(QtCore.QRect(10, 460, 221, 41))
+        self.preview_PushButton.setGeometry(QtCore.QRect(10, 480, 221, 41))
         self.preview_PushButton.setObjectName("preview_PushButton")
         
-        # Move the progress bar down
+        # Move the progress bar down to accommodate the taller log text area
         self.progress_ProgressBar = QtWidgets.QProgressBar(self.centralwidget)
-        self.progress_ProgressBar.setGeometry(QtCore.QRect(10, 510, 221, 21))
+        self.progress_ProgressBar.setGeometry(QtCore.QRect(10, 530, 221, 21))
         self.progress_ProgressBar.setProperty("value", 0)
         self.progress_ProgressBar.setTextVisible(False)
         self.progress_ProgressBar.setOrientation(QtCore.Qt.Horizontal)
         self.progress_ProgressBar.setInvertedAppearance(False)
         self.progress_ProgressBar.setObjectName("progress_ProgressBar")
-        
-        # The paint status frame is always visible now
-        # self.paintStatusFrame.hide()  - removed this line
         
         MainUI.setCentralWidget(self.centralwidget)
         self.statusbar = QtWidgets.QStatusBar(MainUI)

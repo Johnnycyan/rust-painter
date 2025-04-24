@@ -7,6 +7,7 @@ from PyQt5 import QtWidgets
 import sys
 
 from ui.views.main import MainWindow
+from ui.theme.theme import apply_theme
 
 
 def run():
@@ -17,6 +18,9 @@ def run():
 
     # Setup the application and start
     app = QtWidgets.QApplication(sys.argv)
+    
+    # Apply theme based on settings (dark by default)
+    apply_theme()
 
     main = MainWindow()
     main.show()

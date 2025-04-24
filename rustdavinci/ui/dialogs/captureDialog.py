@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSize
+from PyQt5.QtCore import QSize, QSettings
 from PyQt5.QtGui import QMovie, QPainter, QFont
 from PyQt5.QtWidgets import QDialog, QLabel, QPushButton
+
+from ui.theme.theme import apply_theme_to_dialog
+from ui.settings.default_settings import default_settings
 
 
 class CaptureAreaDialog(QDialog):
@@ -14,6 +17,9 @@ class CaptureAreaDialog(QDialog):
         self.setModal(True)
         self.resize(QSize(600, 430))
         self.setFixedSize(QSize(600, 430))
+        
+        # Apply theme to dialog
+        apply_theme_to_dialog(self)
 
         self.label = QLabel(self)
         self.label.setWordWrap(True)
