@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import QRect, QSettings, QSize, Qt
-from PyQt5.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QPushButton
+from PyQt5.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QPushButton, QSlider, QHBoxLayout, QWidget
 
 from ui.settings.settings import Settings
 from ui.views.mainui import Ui_MainUI
@@ -168,6 +168,46 @@ class MainWindow(QMainWindow):
         self.show_processed_PushButton.setGeometry(QRect(515, 400, 275, 21))
         self.show_processed_PushButton.show()
         self.show_processed_PushButton.clicked.connect(self.show_processed_pixmap)
+        
+        # Add quality slider container
+        self.quality_container = QWidget(self)
+        self.quality_container.setGeometry(QRect(240, 430, 550, 30))
+        
+        # Create horizontal layout for the quality slider and labels
+        quality_layout = QHBoxLayout(self.quality_container)
+        quality_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Add quality label
+        quality_label = QLabel("Color Merge Quality:", self.quality_container)
+        quality_layout.addWidget(quality_label)
+        
+        # Create the slider for quality percentage
+        self.quality_slider = QSlider(Qt.Horizontal, self.quality_container)
+        self.quality_slider.setRange(0, 100)
+        
+        # Get saved quality or use default (75%)
+        saved_quality = int(self.settings.value("color_merge_quality", 75))
+        self.quality_slider.setValue(saved_quality)
+        
+        # Connect slider to update function to ONLY update the percentage label, not reprocess
+        self.quality_slider.valueChanged.connect(self.update_quality_label)
+        quality_layout.addWidget(self.quality_slider)
+        
+        # Add percentage label that will update with the slider
+        self.quality_percent_label = QLabel(f"{saved_quality}%", self.quality_container)
+        self.quality_percent_label.setMinimumWidth(30)
+        quality_layout.addWidget(self.quality_percent_label)
+        
+        # Add Update button
+        self.update_quality_button = QPushButton("Update Preview", self.quality_container)
+        self.update_quality_button.clicked.connect(self.apply_quality_update)
+        quality_layout.addWidget(self.update_quality_button)
+        
+        # Show the quality slider container
+        self.quality_container.show()
+        # Apply saved quality on initial open if processed view
+        if self.rustDaVinci.pixmap_on_display == 1:
+            self.apply_quality_update()
 
     def show_original_pixmap(self):
         """Show the original quality pixmap"""
@@ -192,6 +232,41 @@ class MainWindow(QMainWindow):
         if self.height() < 580:
             self.setMinimumHeight(580)
             self.resize(self.width(), 580)
+
+    def update_quality_label(self, value):
+        """Only update the quality percentage label when slider changes"""
+        # Update the percentage label
+        self.quality_percent_label.setText(f"{value}%")
+        
+        # Save the setting for future use
+        self.settings.setValue("color_merge_quality", value)
+
+    def apply_quality_update(self):
+        """Apply the quality update when the button is clicked"""
+        value = self.quality_slider.value()
+        
+        # Only update the processed image if we're showing it
+        if self.rustDaVinci.pixmap_on_display == 1 and hasattr(self.rustDaVinci, "org_img") and self.rustDaVinci.org_img is not None:
+            # Show the log text to see processing updates
+            if not self.ui.log_TextEdit.isVisible():
+                self.ui.log_TextEdit.show()
+            
+            # Update the UI to show we're processing
+            self.ui.log_TextEdit.append(f"Updating preview with {value}% color merge quality...")
+            self.ui.progress_ProgressBar.setValue(0)
+            self.ui.progress_ProgressBar.setTextVisible(True)
+            
+            # Process the image with the new quality setting
+            # This will also update the progress bar
+            self.rustDaVinci.update_preview_quality(value)
+            
+            # Update the display
+            pixmap = self.rustDaVinci.quantized_img_pixmap
+            pixmap = pixmap.scaled(550, 380, Qt.KeepAspectRatio)
+            self.label.setPixmap(pixmap)
+            
+            # Hide progress bar text again
+            self.ui.progress_ProgressBar.setTextVisible(False)
 
     def show(self):
         """Show the main window"""
