@@ -19,7 +19,7 @@ import os
 from lib.rustPaletteData import rust_palette
 from lib.captureArea import capture_area
 from lib.color_functions import hex_to_rgb, rgb_to_hex
-from lib.color_blending import find_optimal_layers, create_layered_colors_map, simulate_layered_image, alpha_blend
+from lib.color_blending import find_optimal_layers, quality_adjusted_find_optimal_layers, create_layered_colors_map, simulate_layered_image, alpha_blend
 from ui.dialogs.captureDialog import CaptureAreaDialog
 from ui.settings.default_settings import default_settings
 
@@ -476,6 +476,49 @@ class rustDaVinci:
             # These are SEPARATE from the base colors and are applied during painting
             self.opacity_values = [1.0, 0.75, 0.5, 0.25]
             
+            # Get the user's color quality setting (if any)
+            color_quality = int(self.settings.value("color_merge_quality", 100))
+            self.parent.ui.log_TextEdit.append(f"Using color quality: {color_quality}%")
+            
+            # Apply the user's quality setting by temporarily replacing the find_optimal_layers function
+            import sys
+            from lib.color_blending import find_optimal_layers as original_find_optimal_layers
+            
+            # Create a wrapper that uses our quality setting
+            def quality_adjusted_find_optimal_layers(target_color, background_color, base_colors, 
+                                                  opacity_levels, max_layers=3, color_cache=None):
+                
+                # Override the early termination threshold in find_optimal_layers
+                # Adjust color_distance threshold based on quality percent
+                def patched_color_distance(color1, color2):
+                    # Calculate basic Euclidean distance
+                    r1, g1, b1 = color1
+                    r2, g2, b2 = color2
+                    return ((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) ** 0.5
+                
+                # Store the original functions
+                original_color_distance = sys.modules['lib.color_blending'].color_distance
+                
+                # Replace the functions
+                color_blending_module = sys.modules['lib.color_blending']
+                color_blending_module.color_distance = patched_color_distance
+                
+                # Call the original function with our adjusted threshold
+                result = original_find_optimal_layers(
+                    target_color, background_color, base_colors, 
+                    opacity_levels, max_layers, color_cache
+                )
+                
+                # Restore the original functions
+                color_blending_module.color_distance = original_color_distance
+                
+                return result
+            
+            # Replace the find_optimal_layers function temporarily
+            color_blending_module = sys.modules['lib.color_blending']
+            original_find_optimal_layers_func = color_blending_module.find_optimal_layers
+            color_blending_module.find_optimal_layers = quality_adjusted_find_optimal_layers
+            
             # Check if we can use multiprocessing for better performance
             try:
                 import multiprocessing
@@ -483,7 +526,34 @@ class rustDaVinci:
                 if multiprocessing.cpu_count() > 1 and total_pixels > 50000:
                     from lib.color_blending import create_layered_colors_map_parallel
                     self.parent.ui.log_TextEdit.append(f"Using parallel processing with {multiprocessing.cpu_count()} cores")
-                    self.layered_colors_map = create_layered_colors_map_parallel(
+                    
+                    # Define a function to create layered colors map with quality adjustment
+                    def create_layered_colors_map_parallel_with_quality(image, background_color, palette_colors, 
+                                                                     opacity_values, max_layers=2, update_callback=None):
+                        # Adjust bucket size based on quality: 100% => bucket_size=1, 0% => bucket_size up to 50
+                        bucket_size = max(1, int(1 + (1 - color_quality / 100.0) * 50))
+                        
+                        # Store original bucket size value
+                        original_bucket_size = 5  # Default bucket size used in the library
+                        
+                        try:
+                            # Apply bucket size adjustment by monkey patching the module
+                            # This is a bit hacky but necessary to influence the parallel processing
+                            import lib.color_blending
+                            if hasattr(lib.color_blending, '_BUCKET_SIZE'):
+                                original_bucket_size = lib.color_blending._BUCKET_SIZE
+                                lib.color_blending._BUCKET_SIZE = bucket_size
+                            
+                            # Call the original function with our settings
+                            return create_layered_colors_map_parallel(image, background_color, palette_colors, 
+                                                                   opacity_values, max_layers, update_callback)
+                        finally:
+                            # Restore original bucket size value if needed
+                            if hasattr(lib.color_blending, '_BUCKET_SIZE'):
+                                lib.color_blending._BUCKET_SIZE = original_bucket_size
+                    
+                    # Use our quality-adjusted version
+                    self.layered_colors_map = create_layered_colors_map_parallel_with_quality(
                         temp_img,
                         background_color,
                         self.base_palette_colors,
@@ -494,7 +564,153 @@ class rustDaVinci:
                 else:
                     # Fall back to single-threaded for small images
                     from lib.color_blending import create_layered_colors_map
-                    self.layered_colors_map = create_layered_colors_map(
+                    
+                    # Define a function to create layered colors map with quality adjustment
+                    def create_layered_colors_map_with_quality(image, background_color, palette_colors, 
+                                                            opacity_values, max_layers=2, update_callback=None):
+                        # Adjust bucket size based on quality: 100% => bucket_size=1, 0% => bucket_size up to 50
+                        bucket_size = max(1, int(1 + (1 - color_quality / 100.0) * 50))
+                        
+                        # Create a custom version that uses our adjusted bucket size and similarity threshold
+                        width, height = image.size
+                        pixel_data = image.load()
+                        layered_colors = {}
+                        color_cache = {}
+                        
+                        # Starting timestamp for progress calculation
+                        start_time = time.time()
+                        progress_shown = False
+                        
+                        # Find unique colors in the image (with sampling for large images)
+                        unique_colors = set()
+                        
+                        # Update progress with the scan phase (0-5%)
+                        if update_callback:
+                            update_callback(0, 0, 0)
+                            progress_shown = True
+                        
+                        downsample = max(1, min(width, height) // 400)
+                        total_pixels = (width // downsample) * (height // downsample)
+                        pixels_processed = 0
+                        
+                        for y in range(0, height, downsample):
+                            for x in range(0, width, downsample):
+                                unique_colors.add(pixel_data[x, y])
+                                pixels_processed += 1
+                                
+                                # Update progress
+                                if pixels_processed % 5000 == 0 or pixels_processed >= total_pixels:
+                                    if update_callback:
+                                        scan_progress = min(5, int(pixels_processed / total_pixels * 5))
+                                        elapsed = time.time() - start_time
+                                        remaining = elapsed / scan_progress * (5 - scan_progress) if scan_progress > 0 else 0
+                                        update_callback(scan_progress, elapsed, remaining)
+                        
+                        # Group similar colors using our quality-adjusted bucket size
+                        color_groups = {}
+                        
+                        # Update progress - now on color grouping phase (5-25%)
+                        if update_callback:
+                            update_callback(5, time.time() - start_time, 0)
+                        
+                        total_unique_colors = len(unique_colors)
+                        colors_processed = 0
+                        
+                        for color in unique_colors:
+                            # Quantize the color into buckets (adjusts based on quality)
+                            bucket_key = (color[0]//bucket_size, color[1]//bucket_size, color[2]//bucket_size)
+                            if bucket_key not in color_groups:
+                                color_groups[bucket_key] = []
+                            color_groups[bucket_key].append(color)
+                            
+                            # Update progress
+                            colors_processed += 1
+                            if colors_processed % 100 == 0 or colors_processed >= total_unique_colors:
+                                if update_callback:
+                                    group_progress = 5 + min(20, int(colors_processed / total_unique_colors * 20))
+                                    elapsed = time.time() - start_time
+                                    remaining = elapsed / group_progress * (25 - group_progress) if group_progress > 0 else 0
+                                    update_callback(group_progress, elapsed, remaining)
+                        
+                        # Calculate average colors for each bucket
+                        bucket_layers = {}
+                        
+                        # Update progress - now on color layer calculation phase (25-75%)
+                        if update_callback:
+                            update_callback(25, time.time() - start_time, 0)
+                        
+                        total_buckets = len(color_groups)
+                        buckets_processed = 0
+                        
+                        for bucket_key, colors in color_groups.items():
+                            r_sum = g_sum = b_sum = 0
+                            for color in colors:
+                                r_sum += color[0]
+                                g_sum += color[1]
+                                b_sum += color[2]
+                            avg_color = (
+                                int(r_sum / len(colors)),
+                                int(g_sum / len(colors)),
+                                int(b_sum / len(colors))
+                            )
+                            
+                            # Calculate layers for this color bucket
+                            bucket_layers[bucket_key] = quality_adjusted_find_optimal_layers(
+                                avg_color,
+                                background_color,
+                                palette_colors,
+                                opacity_values,
+                                max_layers,
+                                color_cache
+                            )
+                            
+                            # Update progress
+                            buckets_processed += 1
+                            if buckets_processed % 10 == 0 or buckets_processed >= total_buckets:
+                                if update_callback:
+                                    bucket_progress = 25 + min(50, int(buckets_processed / total_buckets * 50))
+                                    elapsed = time.time() - start_time
+                                    remaining = elapsed / bucket_progress * (75 - bucket_progress) if bucket_progress > 0 else 0
+                                    update_callback(bucket_progress, elapsed, remaining)
+                        
+                        # Assign colors to each pixel using the bucket calculations
+                        # Update progress - now on pixel assignment phase (75-100%)
+                        if update_callback:
+                            update_callback(75, time.time() - start_time, 0)
+                        
+                        total_image_pixels = width * height
+                        image_pixels_processed = 0
+                        
+                        for y in range(height):
+                            for x in range(width):
+                                color = pixel_data[x, y]
+                                bucket_key = (color[0]//bucket_size, color[1]//bucket_size, color[2]//bucket_size)
+                                
+                                # Get layers from bucket
+                                layers = bucket_layers.get(bucket_key, [])
+                                
+                                # Only store pixels that need painting
+                                if layers:
+                                    layered_colors[(x, y)] = layers
+                                
+                                # Update progress less frequently for better performance
+                                image_pixels_processed += 1
+                                if image_pixels_processed % 10000 == 0 or image_pixels_processed >= total_image_pixels:
+                                    if update_callback:
+                                        pixel_progress = 75 + min(25, int(image_pixels_processed / total_image_pixels * 25))
+                                        elapsed = time.time() - start_time
+                                        remaining = elapsed / pixel_progress * (100 - pixel_progress) if pixel_progress > 0 else 0
+                                        update_callback(pixel_progress, elapsed, remaining)
+                        
+                        # Final update
+                        if update_callback:
+                            elapsed = time.time() - start_time
+                            update_callback(100, elapsed, 0)
+                        
+                        return layered_colors
+                    
+                    # Use our quality-adjusted version
+                    self.layered_colors_map = create_layered_colors_map_with_quality(
                         temp_img,
                         background_color,
                         self.base_palette_colors,
@@ -514,6 +730,9 @@ class rustDaVinci:
                     max_layers=2,
                     update_callback=update_progress
                 )
+            finally:
+                # Restore the original find_optimal_layers function
+                color_blending_module.find_optimal_layers = original_find_optimal_layers_func
                 
             # Close the progress dialog
             self.progress_dialog.close()

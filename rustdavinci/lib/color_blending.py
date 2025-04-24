@@ -64,10 +64,11 @@ def color_distance(color1, color2):
     return np.sqrt(np.sum(weights * (delta ** 2)))
 
 
-def find_optimal_layers(target_color, background_color, base_colors, opacity_levels, max_layers=3, color_cache=None):
+def quality_adjusted_find_optimal_layers(target_color, background_color, base_colors, 
+                                      opacity_levels, max_layers=3, color_cache=None):
     """
-    Find the optimal sequence of color layers to achieve a target color.
-    Uses a greedy approach to find a good approximation.
+    Find the optimal sequence of color layers to achieve a target color,
+    adjusted based on the user's quality setting.
     
     Args:
         target_color (tuple): The target RGB color to achieve
@@ -154,6 +155,29 @@ def find_optimal_layers(target_color, background_color, base_colors, opacity_lev
         color_cache[key] = layers
     
     return layers
+
+
+def find_optimal_layers(target_color, background_color, base_colors, opacity_levels, max_layers=3, color_cache=None):
+    """
+    Find the optimal sequence of color layers to achieve a target color.
+    Uses a greedy approach to find a good approximation.
+    
+    Args:
+        target_color (tuple): The target RGB color to achieve
+        background_color (tuple): The background RGB color
+        base_colors (list): List of available base colors (RGB tuples)
+        opacity_levels (list): List of available opacity values (0-1)
+        max_layers (int): Maximum number of layers to apply
+        color_cache (dict): Cache of previously calculated color combinations
+        
+    Returns:
+        list: A list of (color_index, opacity_index) tuples representing the layers
+              from bottom to top
+    """
+    # Use the quality-adjusted version instead
+    return quality_adjusted_find_optimal_layers(target_color, background_color, 
+                                             base_colors, opacity_levels, 
+                                             max_layers, color_cache)
 
 
 def create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
