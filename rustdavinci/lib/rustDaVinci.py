@@ -2776,6 +2776,12 @@ class rustDaVinci:
         self.parent.ui.log_TextEdit.append(f"Updating preview with {quality_percent}% quality setting...")
         QApplication.processEvents()
         
+        # Convert quality percentage to color similarity threshold
+        # Lower quality = higher threshold = more colors merged
+        # Higher quality = lower threshold = fewer colors merged
+        # Scale from 0.5 (min threshold) to 15.0 (max threshold)
+        similarity_threshold = 15.0 - ((quality_percent / 100.0) * 14.5)
+        
         # Store the quality setting in the settings
         self.settings.setValue("color_merge_quality", quality_percent)
         
@@ -2815,7 +2821,7 @@ class rustDaVinci:
                 return False
             
             # Use our color blending module but with the quality threshold
-            from lib.color_blending import simulate_layered_image, color_distance
+            from lib.color_blending import create_layered_colors_map, simulate_layered_image, color_distance
             
             # Override the color_distance comparison threshold in find_optimal_layers
             # by monkey patching the function temporarily
@@ -2824,6 +2830,8 @@ class rustDaVinci:
             # Create a wrapper that uses our similarity threshold
             def quality_adjusted_find_optimal_layers(target_color, background_color, base_colors, 
                                                   opacity_levels, max_layers=3, color_cache=None):
+                # Store the original threshold
+                from lib.color_blending import find_optimal_layers
                 
                 # Override the early termination threshold in find_optimal_layers
                 def patched_color_distance(color1, color2):
@@ -2853,6 +2861,7 @@ class rustDaVinci:
             # Replace the find_optimal_layers function temporarily
             import sys
             color_blending_module = sys.modules['lib.color_blending']
+            original_find_optimal_layers = color_blending_module.find_optimal_layers
             color_blending_module.find_optimal_layers = quality_adjusted_find_optimal_layers
             
             # Override the color merging threshold
