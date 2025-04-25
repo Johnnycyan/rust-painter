@@ -205,10 +205,19 @@ class rustDaVinci:
                 self.convert_transparency()
                 self.create_pixmaps()
 
-                if self.parent.is_expanded:
-                    self.parent.label.hide()
-                self.parent.expand_window()
-                self.pixmap_on_display = 1
+                if bool(
+                    self.settings.value(
+                        "show_preview_load", default_settings["show_preview_load"]
+                    )
+                ):
+                    # Always use the optimized high quality pixmap
+                    self.pixmap_on_display = 2
+
+                    if self.parent.is_expanded:
+                        self.parent.label.hide()
+                    self.parent.expand_window()
+                else:
+                    self.pixmap_on_display = 0
 
                 self.parent.ui.log_TextEdit.clear()
                 self.parent.ui.progress_ProgressBar.setValue(0)
@@ -631,14 +640,14 @@ class rustDaVinci:
 
             # Use Image.LANCZOS instead of deprecated Image.ANTIALIAS
             if hsize <= self.canvas_h:
-                resized_img = self.org_img.resize((self.canvas_w, hsize), Image.Resampling.LANCZOS)
+                resized_img = self.org_img.resize((self.canvas_w, hsize), Image.LANCZOS)
                 y_correction = int((self.canvas_h - hsize) / 2)
             elif wsize <= self.canvas_w:
-                resized_img = self.org_img.resize((wsize, self.canvas_h), Image.Resampling.LANCZOS)
+                resized_img = self.org_img.resize((wsize, self.canvas_h), Image.LANCZOS)
                 x_correction = int((self.canvas_w - wsize) / 2)
             else:
                 resized_img = self.org_img.resize(
-                    (self.canvas_w, self.canvas_h), Image.Resampling.LANCZOS
+                    (self.canvas_w, self.canvas_h), Image.LANCZOS
                 )
 
             # Get background color for comparison
@@ -2270,7 +2279,7 @@ class rustDaVinci:
                 percent = int((pixels_processed / pixel_count) * grid_building_steps)
                 progress_bar.setValue(percent)
                 elapsed = time.time() - start_time
-                remaining = elapsed / percent * (total_progress_steps - percent) if percent > 0 else 0
+                remaining = (elapsed / percent) * (total_progress_steps - percent) if percent > 0 else 0
                 elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
                 remaining_str = time.strftime("%M:%S", time.gmtime(remaining))
                 progress_status.setText(f"Building pixel grid: {int(pixels_processed / pixel_count * 100)}% | " +
@@ -2761,331 +2770,3 @@ class rustDaVinci:
         
         # Process UI events
         QApplication.processEvents()
-
-    def update_preview_quality(self, quality_percent):
-        """
-        Update the preview image based on the quality percentage slider.
-        A lower quality percentage will merge similar colors together.
-        
-        Args:
-            quality_percent (int): Quality percentage (0-100)
-        """
-        if self.org_img is None:
-            return
-            
-        self.parent.ui.log_TextEdit.append(f"Updating preview with {quality_percent}% quality setting...")
-        QApplication.processEvents()
-        
-        # Convert quality percentage to color similarity threshold
-        # Lower quality = higher threshold = more colors merged
-        # Higher quality = lower threshold = fewer colors merged
-        # Scale from 0.5 (min threshold) to 15.0 (max threshold)
-        similarity_threshold = 15.0 - ((quality_percent / 100.0) * 14.5)
-        
-        # Store the quality setting in the settings
-        self.settings.setValue("color_merge_quality", quality_percent)
-        
-        try:
-            # Prepare the base image
-            temp_img = self.org_img.copy()
-            if temp_img.mode != "RGB":
-                temp_img = temp_img.convert("RGB")
-                
-            # Get background color from settings
-            bg_color_hex = self.settings.value("background_color", default_settings["background_color"])
-            bg_color_rgb = hex_to_rgb(bg_color_hex)
-            
-            background_color = bg_color_rgb
-            
-            # Store the background color used for calculation
-            self.background_color = background_color
-            
-            # Define the opacity values
-            self.opacity_values = [1.0, 0.75, 0.5, 0.25]
-            
-            # Create a progress update callback function to update the UI
-            def update_progress_callback(percent, elapsed, remaining):
-                # Update the progress bar
-                self.parent.ui.progress_ProgressBar.setValue(percent)
-                
-                # Update the log every 10% to avoid too many updates
-                if percent % 10 == 0 or percent == 100:
-                    elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed)) if elapsed else "00:00"
-                    remaining_str = time.strftime("%M:%S", time.gmtime(remaining)) if remaining else "00:00"
-                    self.parent.ui.log_TextEdit.append(f"Processing: {percent}% | Elapsed: {elapsed_str} | Remaining: {remaining_str}")
-                
-                # Process UI events to make sure the UI updates
-                QApplication.processEvents()
-                
-                # Return False to indicate we shouldn't cancel processing
-                return False
-            
-            # Use our color blending module but with the quality threshold
-            from lib.color_blending import create_layered_colors_map, simulate_layered_image, color_distance
-            
-            # Override the color_distance comparison threshold in find_optimal_layers
-            # by monkey patching the function temporarily
-            from lib.color_blending import find_optimal_layers as original_find_optimal_layers
-            
-            # Create a wrapper that uses our similarity threshold
-            def quality_adjusted_find_optimal_layers(target_color, background_color, base_colors, 
-                                                  opacity_levels, max_layers=3, color_cache=None):
-                # Store the original threshold
-                from lib.color_blending import find_optimal_layers
-                
-                # Override the early termination threshold in find_optimal_layers
-                def patched_color_distance(color1, color2):
-                    # Calculate basic Euclidean distance
-                    r1, g1, b1 = color1
-                    r2, g2, b2 = color2
-                    return ((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) ** 0.5
-                
-                # Store the original functions
-                original_color_distance = color_distance
-                
-                # Replace the functions
-                color_blending_module = sys.modules['lib.color_blending']
-                color_blending_module.color_distance = patched_color_distance
-                
-                # Call the original function with our adjusted threshold
-                result = original_find_optimal_layers(
-                    target_color, background_color, base_colors, 
-                    opacity_levels, max_layers, color_cache
-                )
-                
-                # Restore the original functions
-                color_blending_module.color_distance = original_color_distance
-                
-                return result
-            
-            # Replace the find_optimal_layers function temporarily
-            import sys
-            color_blending_module = sys.modules['lib.color_blending']
-            original_find_optimal_layers = color_blending_module.find_optimal_layers
-            color_blending_module.find_optimal_layers = quality_adjusted_find_optimal_layers
-            
-            # Override the color merging threshold
-            # This affects how aggressively similar colors are grouped together
-            def create_layered_colors_map_with_quality(image, background_color, palette_colors, 
-                                                    opacity_values, max_layers=2, update_callback=None):
-                # Override bucket size based on quality: 100% => bucket_size=1, 0% => bucket_size up to 50
-                bucket_size = max(1, int(1 + (1 - quality_percent / 100.0) * 50))
-                
-                # Create a custom version that uses our adjusted bucket size and similarity threshold
-                width, height = image.size
-                pixel_data = image.load()
-                layered_colors = {}
-                color_cache = {}
-                
-                # Starting timestamp for progress calculation
-                start_time = time.time()
-                progress_shown = False
-                
-                # Find unique colors in the image (with sampling for large images)
-                unique_colors = set()
-                self.parent.ui.log_TextEdit.append("Analyzing image colors...")
-                QApplication.processEvents()
-                
-                # Update progress with the scan phase (0-5%)
-                if update_callback:
-                    update_callback(0, 0, 0)
-                    progress_shown = True
-                
-                downsample = max(1, min(width, height) // 400)
-                total_pixels = (width // downsample) * (height // downsample)
-                pixels_processed = 0
-                
-                for y in range(0, height, downsample):
-                    for x in range(0, width, downsample):
-                        unique_colors.add(pixel_data[x, y])
-                        pixels_processed += 1
-                        
-                        # Update progress every 5000 pixels or at completion
-                        if pixels_processed % 5000 == 0 or pixels_processed >= total_pixels:
-                            if update_callback:
-                                scan_progress = min(5, int(pixels_processed / total_pixels * 5))
-                                elapsed = time.time() - start_time
-                                remaining = elapsed / scan_progress * (5 - scan_progress) if scan_progress > 0 else 0
-                                update_callback(scan_progress, elapsed, remaining)
-                
-                # Group similar colors using our quality-adjusted bucket size
-                color_groups = {}
-                
-                # Update progress - now on color grouping phase (5-25%)
-                if update_callback:
-                    update_callback(5, time.time() - start_time, 0)
-                
-                total_unique_colors = len(unique_colors)
-                colors_processed = 0
-                
-                for color in unique_colors:
-                    # Quantize the color into buckets (adjusts based on quality)
-                    bucket_key = (color[0]//bucket_size, color[1]//bucket_size, color[2]//bucket_size)
-                    if bucket_key not in color_groups:
-                        color_groups[bucket_key] = []
-                    color_groups[bucket_key].append(color)
-                    
-                    # Update progress
-                    colors_processed += 1
-                    if colors_processed % 100 == 0 or colors_processed >= total_unique_colors:
-                        if update_callback:
-                            group_progress = 5 + min(20, int(colors_processed / total_unique_colors * 20))
-                            elapsed = time.time() - start_time
-                            remaining = elapsed / group_progress * (25 - group_progress) if group_progress > 0 else 0
-                            update_callback(group_progress, elapsed, remaining)
-                
-                # Calculate average colors for each bucket
-                bucket_layers = {}
-                
-                # Update progress - now on color layer calculation phase (25-75%)
-                if update_callback:
-                    update_callback(25, time.time() - start_time, 0)
-                
-                self.parent.ui.log_TextEdit.append(f"Processing {len(color_groups)} color groups...")
-                QApplication.processEvents()
-                
-                total_buckets = len(color_groups)
-                buckets_processed = 0
-                
-                for bucket_key, colors in color_groups.items():
-                    r_sum = g_sum = b_sum = 0
-                    for color in colors:
-                        r_sum += color[0]
-                        g_sum += color[1]
-                        b_sum += color[2]
-                    avg_color = (
-                        int(r_sum / len(colors)),
-                        int(g_sum / len(colors)),
-                        int(b_sum / len(colors))
-                    )
-                    
-                    # Calculate layers for this color bucket
-                    bucket_layers[bucket_key] = quality_adjusted_find_optimal_layers(
-                        avg_color,
-                        background_color,
-                        palette_colors,
-                        opacity_values,
-                        max_layers,
-                        color_cache
-                    )
-                    
-                    # Update progress
-                    buckets_processed += 1
-                    if buckets_processed % 10 == 0 or buckets_processed >= total_buckets:
-                        if update_callback:
-                            bucket_progress = 25 + min(50, int(buckets_processed / total_buckets * 50))
-                            elapsed = time.time() - start_time
-                            remaining = elapsed / bucket_progress * (75 - bucket_progress) if bucket_progress > 0 else 0
-                            update_callback(bucket_progress, elapsed, remaining)
-                
-                # Assign colors to each pixel using the bucket calculations
-                # Update progress - now on pixel assignment phase (75-100%)
-                if update_callback:
-                    update_callback(75, time.time() - start_time, 0)
-                
-                self.parent.ui.log_TextEdit.append("Finalizing pixel assignments...")
-                QApplication.processEvents()
-                
-                total_image_pixels = width * height
-                image_pixels_processed = 0
-                
-                for y in range(height):
-                    for x in range(width):
-                        color = pixel_data[x, y]
-                        bucket_key = (color[0]//bucket_size, color[1]//bucket_size, color[2]//bucket_size)
-                        
-                        # Get layers from bucket
-                        layers = bucket_layers.get(bucket_key, [])
-                        
-                        # Only store pixels that need painting
-                        if layers:
-                            layered_colors[(x, y)] = layers
-                        
-                        # Update progress less frequently for better performance
-                        image_pixels_processed += 1
-                        if image_pixels_processed % 10000 == 0 or image_pixels_processed >= total_image_pixels:
-                            if update_callback:
-                                pixel_progress = 75 + min(25, int(image_pixels_processed / total_image_pixels * 25))
-                                elapsed = time.time() - start_time
-                                remaining = elapsed / pixel_progress * (100 - pixel_progress) if pixel_progress > 0 else 0
-                                update_callback(pixel_progress, elapsed, remaining)
-                
-                # Final update
-                if update_callback:
-                    elapsed = time.time() - start_time
-                    update_callback(100, elapsed, 0)
-                
-                return layered_colors
-            
-            # Call our quality-adjusted function with the progress callback
-            self.parent.ui.log_TextEdit.append(f"Processing image with {quality_percent}% quality...")
-            QApplication.processEvents()
-            
-            self.layered_colors_map = create_layered_colors_map_with_quality(
-                temp_img,
-                background_color,
-                self.base_palette_colors,
-                self.opacity_values,
-                max_layers=2,
-                update_callback=update_progress_callback
-            )
-            
-            # Restore the original function
-            color_blending_module.find_optimal_layers = original_find_optimal_layers
-            
-            # Create the simulated output image
-            self.parent.ui.log_TextEdit.append("Creating final preview image...")
-            self.parent.ui.progress_ProgressBar.setValue(95)
-            QApplication.processEvents()
-            
-            self.simulated_img = simulate_layered_image(
-                temp_img,
-                background_color,
-                self.base_palette_colors,
-                self.opacity_values,
-                self.layered_colors_map
-            )
-            
-            # Cache the calculation results
-            self.color_calculation_cache = {
-                'resized_img': temp_img,
-                'layered_colors_map': self.layered_colors_map,
-                'simulated_img': self.simulated_img,
-                'background_color': background_color
-            }
-            
-            # Update the quantized image for display
-            self.quantized_img = self.simulated_img
-            
-            # Create a pixmap for display
-            self.parent.ui.progress_ProgressBar.setValue(98)
-            QApplication.processEvents()
-            self.parent.ui.log_TextEdit.append("Generating preview pixmap...")
-            
-            self.quantized_img.save("temp_quantized.png")
-            self.quantized_img_pixmap = QPixmap("temp_quantized.png")
-            os.remove("temp_quantized.png")
-            
-            # Complete the progress bar
-            self.parent.ui.progress_ProgressBar.setValue(100)
-            QApplication.processEvents()
-            
-            # Log statistics
-            pixel_count = sum(1 for _ in self.layered_colors_map.values())
-            total_pixels = temp_img.width * temp_img.height
-            self.parent.ui.log_TextEdit.append(
-                f"Preview updated: {pixel_count:,} pixels will be painted " +
-                f"({pixel_count / total_pixels:.1%} of image) at {quality_percent}% quality"
-            )
-            # Log number of unique color+opacity combinations that will be painted
-            unique_color_layers = { (ci, oi) for layers in self.layered_colors_map.values() for (ci, oi) in layers }
-            self.parent.ui.log_TextEdit.append(
-                f"{len(unique_color_layers)} unique color+opacity combinations will be used for painting"
-            )
-            return True
-            
-        except Exception as e:
-            import traceback
-            self.parent.ui.log_TextEdit.append(f"Error updating preview: {str(e)}")
-            self.parent.ui.log_TextEdit.append(traceback.format_exc())
-            return False

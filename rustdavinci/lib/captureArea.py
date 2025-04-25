@@ -87,7 +87,7 @@ def capture_area(preview_image=None):
                     resize_width = int(height * orig_aspect)
                 
                 # Resize the preview image to fit the current selection area
-                resized_img = preview_image.copy().resize((resize_width, resize_height), Image.Resampling.LANCZOS)
+                resized_img = preview_image.copy().resize((resize_width, resize_height), Image.LANCZOS)
                 
                 # Create a centered image with background color
                 centered_img = Image.new("RGB", (width, height), (50, 50, 50))
