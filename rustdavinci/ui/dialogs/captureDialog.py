@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSize, QSettings
-from PyQt5.QtGui import QMovie, QPainter, QFont
-from PyQt5.QtWidgets import QDialog, QLabel, QPushButton
+from PyQt6.QtCore import QSize
+from PyQt6.QtGui import QMovie, QPainter, QFont
+from PyQt6.QtWidgets import QDialog, QLabel, QPushButton
 
 from ui.theme.theme import apply_theme_to_dialog
-from ui.settings.default_settings import default_settings
-
 
 class CaptureAreaDialog(QDialog):
 
@@ -23,7 +21,7 @@ class CaptureAreaDialog(QDialog):
 
         self.label = QLabel(self)
         self.label.setWordWrap(True)
-        self.label.setFont(QFont("MS Shell Dlg 2", 10, QFont.Bold))
+        self.label.setFont(QFont("MS Shell Dlg 2", 10, QFont.Weight.Bold))
         self.label.setGeometry(20, 357, 390, 53)
 
         if dialog == 0:

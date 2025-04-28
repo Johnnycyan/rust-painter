@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSettings
-from PyQt5.QtWidgets import QApplication, QMessageBox, QDialog, QStyleFactory
-from PyQt5.QtGui import QPalette, QColor
+from PyQt6.QtCore import QSettings
+from PyQt6.QtWidgets import QApplication, QStyleFactory
+from PyQt6.QtGui import QPalette, QColor
 
 from ui.settings.default_settings import default_settings
 
@@ -484,24 +484,24 @@ def get_theme_palette(theme="dark"):
         colors = LIGHT_THEME_COLORS
     
     color_roles = {
-        QPalette.Window: colors['window'],
-        QPalette.WindowText: colors['window_text'],
-        QPalette.Base: colors['base'],
-        QPalette.AlternateBase: colors['alternate_base'],
-        QPalette.ToolTipBase: colors['window'],
-        QPalette.ToolTipText: colors['window_text'],
-        QPalette.PlaceholderText: colors['text'],
-        QPalette.Text: colors['text'],
-        QPalette.Button: colors['button'],
-        QPalette.ButtonText: colors['button_text'],
-        QPalette.BrightText: colors['bright_text'],
-        QPalette.Highlight: colors['highlight'],
-        QPalette.HighlightedText: colors['highlight_text'],
-        QPalette.Link: colors['link'],
-        QPalette.Dark: colors['dark'],
-        QPalette.Mid: colors['mid'],
-        QPalette.Midlight: colors['midlight'],
-        QPalette.Light: colors['light'],
+        QPalette.ColorRole.Window: colors['window'],
+        QPalette.ColorRole.WindowText: colors['window_text'],
+        QPalette.ColorRole.Base: colors['base'],
+        QPalette.ColorRole.AlternateBase: colors['alternate_base'],
+        QPalette.ColorRole.ToolTipBase: colors['window'],
+        QPalette.ColorRole.ToolTipText: colors['window_text'],
+        QPalette.ColorRole.PlaceholderText: colors['text'],
+        QPalette.ColorRole.Text: colors['text'],
+        QPalette.ColorRole.Button: colors['button'],
+        QPalette.ColorRole.ButtonText: colors['button_text'],
+        QPalette.ColorRole.BrightText: colors['bright_text'],
+        QPalette.ColorRole.Highlight: colors['highlight'],
+        QPalette.ColorRole.HighlightedText: colors['highlight_text'],
+        QPalette.ColorRole.Link: colors['link'],
+        QPalette.ColorRole.Dark: colors['dark'],
+        QPalette.ColorRole.Mid: colors['mid'],
+        QPalette.ColorRole.Midlight: colors['midlight'],
+        QPalette.ColorRole.Light: colors['light'],
     }
     
     for role, color in color_roles.items():

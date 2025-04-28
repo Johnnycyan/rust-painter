@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5 import QtCore
-from PyQt5 import QtWidgets
+from PyQt6 import QtCore
+from PyQt6 import QtWidgets
 
 import sys
 
@@ -24,7 +24,7 @@ def run():
 
     main = MainWindow()
     main.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())  # Note: exec_() changed to exec() in PyQt6
 
 
 if __name__ == "__main__":

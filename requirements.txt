@@ -7,4 +7,4 @@ pynput
 numpy
 opencv-python
 pyqt5-tools
-PyQt5
+PyQt6

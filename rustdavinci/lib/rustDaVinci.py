@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSettings, Qt, QRect, QDir, QTimer
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QMessageBox, QInputDialog, QFileDialog, QApplication, QLabel, QProgressBar
+from PyQt6.QtCore import QSettings, Qt, QRect, QDir, QTimer
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QMessageBox, QInputDialog, QFileDialog, QApplication, QLabel, QProgressBar
 
 from pynput import keyboard
 from PIL import Image
@@ -165,8 +165,9 @@ class rustDaVinci:
         if not os.path.exists(folder_path):
             folder_path = QDir.homePath()
 
+        # Convert parent to QWidget type for PyQt6 compatibility
         path = QFileDialog.getOpenFileName(
-            self.parent, title, folder_path, fileformats
+            parent=self.parent, caption=title, directory=folder_path, filter=fileformats
         )[0]
 
         if path.endswith((".png", ".jpg", "jpeg", ".gif", ".bmp")):
@@ -226,20 +227,20 @@ class rustDaVinci:
                 self.org_img = None
                 self.org_img_ok = False
                 msg = QMessageBox(self.parent)
-                msg.setIcon(QMessageBox.Critical)
+                msg.setIcon(QMessageBox.Icon.Critical)
                 msg.setText("ERROR! Could not load the selected image...")
                 msg.setInformativeText(str(e))
-                msg.exec_()
+                msg.exec()
 
         self.update()
 
     def load_image_from_url(self):
         """Load image from url"""
         dialog = QInputDialog(self.parent)
-        dialog.setInputMode(QInputDialog.TextInput)
+        dialog.setInputMode(QInputDialog.InputMode.TextInput)
         dialog.setLabelText("Load image from URL:")
         dialog.resize(500, 100)
-        ok_clicked = dialog.exec_()
+        ok_clicked = dialog.exec()
         url = dialog.textValue()
 
         if ok_clicked and url != "":
@@ -289,10 +290,10 @@ class rustDaVinci:
                 self.org_img = None
                 self.org_img_ok = False
                 msg = QMessageBox(self.parent)
-                msg.setIcon(QMessageBox.Critical)
+                msg.setIcon(QMessageBox.Icon.Critical)
                 msg.setText("ERROR! Could not load the selected image...")
                 msg.setInformativeText(str(e))
-                msg.exec_()
+                msg.exec()
 
         self.update()
 
@@ -365,15 +366,15 @@ class rustDaVinci:
                 
                 msg = QMessageBox(self.parent)
                 apply_theme_to_dialog(msg)  # Apply current theme to dialog
-                msg.setIcon(QMessageBox.Question)
+                msg.setIcon(QMessageBox.Icon.Question)
                 msg.setWindowTitle("Large Image Detected")
                 msg.setText(f"This image is very large ({temp_img.width}x{temp_img.height} = {total_pixels:,} pixels).")
                 msg.setInformativeText(f"Would you like to temporarily resize to {new_width}x{new_height} for faster color calculation?\n\n" +
                                        "Note: The final painted image will still use your original resolution.")
-                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                response = msg.exec_()
+                msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                response = msg.exec()
                 
-                if response == QMessageBox.Yes:
+                if response == QMessageBox.StandardButton.Yes:
                     # Resize for faster processing
                     temp_img = temp_img.resize((new_width, new_height), Image.LANCZOS)
                     self.parent.ui.log_TextEdit.append(f"Using reduced resolution ({new_width}x{new_height}) for color calculation...")
@@ -385,7 +386,7 @@ class rustDaVinci:
             self.parent.ui.log_TextEdit.append("Starting optimal color layering calculation...")
             
             # Create a much larger custom dialog for progress display instead of using QMessageBox
-            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
             from ui.theme.theme import apply_theme_to_dialog
             
             # Create custom dialog with proper size
@@ -410,6 +411,7 @@ class rustDaVinci:
             # Add progress bar with better size
             self.progress_bar = QProgressBar(self.progress_dialog)
             self.progress_bar.setMinimumHeight(30)  # Taller progress bar
+            self.progress_bar.setValue(0)  # Initialize to 0
             layout.addWidget(self.progress_bar)
             
             # Add status label with better formatting
@@ -434,8 +436,21 @@ class rustDaVinci:
             # Set the layout on the dialog
             self.progress_dialog.setLayout(layout)
             
-            # Show the dialog
+            # Show the dialog and immediately process events to make sure it renders properly
             self.progress_dialog.show()
+            QApplication.processEvents()
+            
+            # Add initial progress updates even before any actual work begins
+            self.progress_bar.setValue(1)
+            self.progress_status.setText("Initializing color analysis...")
+            QApplication.processEvents()
+            
+            # Small delay to ensure the UI renders
+            time.sleep(0.25)
+            
+            # Update status again to show it's working
+            self.progress_bar.setValue(2)
+            self.progress_status.setText("Preparing color palette...")
             QApplication.processEvents()
             
             # Background color for calculations
@@ -449,6 +464,11 @@ class rustDaVinci:
             # Store the background color used for calculation
             self.background_color = background_color
             
+            # Another progress update to keep UI responsive
+            self.progress_bar.setValue(3)
+            self.progress_status.setText("Starting color calculations...")
+            QApplication.processEvents()
+            
             # Update callback function to update the progress dialog
             self.cancel_requested = False
             
@@ -456,7 +476,8 @@ class rustDaVinci:
                 if self.cancel_requested:
                     return True  # Signal to stop processing
                     
-                self.progress_bar.setValue(percent)
+                # Start at 5% rather than 0% to show initial progress
+                self.progress_bar.setValue(5 + int(percent * 0.95))
                 
                 # Format time strings
                 elapsed_str = time.strftime("%M:%S", time.gmtime(elapsed))
@@ -884,14 +905,12 @@ class rustDaVinci:
         if self.org_img_ok:
             # Use the original or quantized image as a preview
             if self.quantized_img:
-                # If we have a processed image, use it
                 preview_img = self.quantized_img
             elif self.org_img:
-                # Otherwise fall back to the original image
                 preview_img = self.org_img
                 
         dialog = CaptureAreaDialog(self.parent, 0)
-        ans = dialog.exec_()
+        ans = dialog.exec()
         if ans == 0:
             return False
 
@@ -904,17 +923,17 @@ class rustDaVinci:
             return False
         elif canvas_area[2] == 0 or canvas_area[3] == 0:
             msg = QMessageBox(self.parent)
-            msg.setIcon(QMessageBox.Critical)
+            msg.setIcon(QMessageBox.Icon.Critical)
             msg.setText(
                 "Invalid coordinates and ratio. Drag & drop the top left corner of the canvas to the bottom right corner."
             )
-            msg.exec_()
+            msg.exec()
             return False
 
         # Show confirmation with area details
         msg = QMessageBox(self.parent)
         msg.setWindowTitle("Canvas Area Selected")
-        msg.setIcon(QMessageBox.Information)
+        msg.setIcon(QMessageBox.Icon.Information)
         msg.setText(
             "Coordinates:\n"
             + "X =\t\t"
@@ -935,11 +954,11 @@ class rustDaVinci:
             msg.setInformativeText("Continue to iterate with the current color calculation?")
         
         # Create custom buttons instead of using setButtonText
-        continue_btn = msg.addButton("Continue", QMessageBox.YesRole)
-        try_again_btn = msg.addButton("Try Again", QMessageBox.NoRole)
+        continue_btn = msg.addButton("Continue", QMessageBox.ButtonRole.YesRole)
+        try_again_btn = msg.addButton("Try Again", QMessageBox.ButtonRole.NoRole)
         msg.setDefaultButton(continue_btn)
         
-        msg.exec_()
+        msg.exec()
         
         if msg.clickedButton() == try_again_btn:
             # User wants to try again
@@ -956,7 +975,7 @@ class rustDaVinci:
     def locate_control_area_manually(self):
         """"""
         dialog = CaptureAreaDialog(self.parent, 1)
-        ans = dialog.exec_()
+        ans = dialog.exec()
         if ans == 0:
             return False
 
@@ -969,18 +988,17 @@ class rustDaVinci:
             return False
         elif ctrl_area[2] == 0 and ctrl_area[3] == 0:
             msg = QMessageBox(self.parent)
-            msg.setIcon(QMessageBox.Critical)
+            msg.setIcon(QMessageBox.Icon.Critical)
             msg.setText(
                 "Invalid coordinates and ratio. Drag & drop the top left corner of the canvas to the bottom right corner."
             )
-            msg.exec_()
+            msg.exec()
             self.update()
             return False
 
-        btn = QMessageBox.question(
-            self.parent,
-            None,
-            "Coordinates:\n"
+        msg = QMessageBox(self.parent)
+        msg.setWindowTitle("Confirm Control Area")
+        msg.setText("Coordinates:\n"
             + "X =\t\t"
             + str(ctrl_area[0])
             + "\n"
@@ -993,11 +1011,12 @@ class rustDaVinci:
             + "Height =\t"
             + str(ctrl_area[3])
             + "\n\n"
-            + "Would you like to update the painting controls area coordinates?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if btn == QMessageBox.Yes:
+            + "Would you like to update the painting controls area coordinates?")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+        
+        btn = msg.exec()
+        if btn == QMessageBox.StandardButton.Yes:
             self.parent.ui.log_TextEdit.append("Controls area position updated...")
             self.settings.setValue("ctrl_x", str(ctrl_area[0]))
             self.settings.setValue("ctrl_y", str(ctrl_area[1]))
@@ -1014,16 +1033,15 @@ class rustDaVinci:
 
         msg = QMessageBox(self.parent)
         if not ctrl_area:
-            msg.setIcon(QMessageBox.Critical)
+            msg.setIcon(QMessageBox.Icon.Critical)
             msg.setText(
                 "Couldn't find the painting control area automatically... Please try to manually capture it instead..."
             )
-            msg.exec_()
+            msg.exec()
         else:
-            btn = QMessageBox.question(
-                self.parent,
-                None,
-                "Coordinates:\n"
+            msg = QMessageBox(self.parent)
+            msg.setWindowTitle("Coordinates Found")
+            msg.setText("Coordinates:\n"
                 + "X =\t\t"
                 + str(ctrl_area[0])
                 + "\n"
@@ -1036,11 +1054,12 @@ class rustDaVinci:
                 + "Height =\t"
                 + str(ctrl_area[3])
                 + "\n\n"
-                + "Would you like to update the painting controls area coordinates?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-            if btn == QMessageBox.Yes:
+                + "Would you like to update the painting controls area coordinates?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+            
+            btn = msg.exec()
+            if btn == QMessageBox.StandardButton.Yes:
                 self.parent.ui.log_TextEdit.append("Controls area position updated...")
                 self.settings.setValue("ctrl_x", str(ctrl_area[0]))
                 self.settings.setValue("ctrl_y", str(ctrl_area[1]))
@@ -1733,14 +1752,16 @@ class rustDaVinci:
         question += "\nWould you like to start the painting?"
         
         if show_info:
-            btn = QMessageBox.question(
-                self.parent,
-                None,
-                question,
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-            if btn == QMessageBox.No:
+            # Create a proper PyQt6 style message box
+            msg = QMessageBox(self.parent)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("Ready to Paint")
+            msg.setText(question)
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+            
+            result = msg.exec()
+            if result == QMessageBox.StandardButton.No:
                 return
 
         # Disable mainwindow buttons while painting
@@ -1762,7 +1783,7 @@ class rustDaVinci:
 
         # Add label info about pause, skip and abort keys
         self.hotkey_label = QLabel(self.parent)
-        self.hotkey_label.setGeometry(QRect(10, 559, 221, 21))
+        self.hotkey_label.setGeometry(QRect(10, 761, 221, 21))
         self.hotkey_label.setText(
             self.pause_key
             + " = Pause        "
@@ -2199,7 +2220,7 @@ class rustDaVinci:
         QApplication.processEvents()
         
         # Create a progress dialog similar to the one used for color calculation
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
         from ui.theme.theme import apply_theme_to_dialog
         
         # Create custom dialog with proper size

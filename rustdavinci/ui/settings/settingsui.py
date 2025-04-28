@@ -2,12 +2,12 @@
 
 # Form implementation generated from reading ui file 'settingsui.ui'
 #
-# Created by: PyQt5 UI code generator 5.13.1
+# Created by: PyQt6 UI code generator
 #
 # WARNING! All changes made in this file will be lost!
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 
 class Ui_SettingsUI(object):
@@ -15,7 +15,7 @@ class Ui_SettingsUI(object):
         SettingsUI.setObjectName("SettingsUI")
         # Increase height from 510 to 550 to give more room for elements
         SettingsUI.resize(391, 550)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(SettingsUI.sizePolicy().hasHeightForWidth())
@@ -25,7 +25,7 @@ class Ui_SettingsUI(object):
         self.tabWidget = QtWidgets.QTabWidget(SettingsUI)
         # Increase height of tab widget from 461 to 500 for more space
         self.tabWidget.setGeometry(QtCore.QRect(6, 9, 381, 500))
-        self.tabWidget.setTabShape(QtWidgets.QTabWidget.Rounded)
+        self.tabWidget.setTabShape(QtWidgets.QTabWidget.TabShape.Rounded)
         self.tabWidget.setObjectName("tabWidget")
         self.generalTab = QtWidgets.QWidget()
         self.generalTab.setObjectName("generalTab")
@@ -49,11 +49,10 @@ class Ui_SettingsUI(object):
         
         self.line_1 = QtWidgets.QFrame(self.generalTab)
         self.line_1.setGeometry(QtCore.QRect(10, 70, 351, 20))
-        self.line_1.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_1.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_1.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_1.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_1.setObjectName("line_1")
         
-        # Adjust control area coordinates positions
         self.label_2 = QtWidgets.QLabel(self.generalTab)
         self.label_2.setGeometry(QtCore.QRect(20, 120, 161, 20))
         self.label_2.setObjectName("label_2")
@@ -104,21 +103,21 @@ class Ui_SettingsUI(object):
 
         # Adjust position of control buttons
         self.clear_coords_PushButton = QtWidgets.QPushButton(self.generalTab)
-        self.clear_coords_PushButton.setGeometry(QtCore.QRect(130, 210, 101, 23))
-        self.clear_coords_PushButton.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.clear_coords_PushButton.setGeometry(QtCore.QRect(130, 210, 110, 23))
+        self.clear_coords_PushButton.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.clear_coords_PushButton.setDefault(False)
         self.clear_coords_PushButton.setObjectName("clear_coords_PushButton")
         
         self.show_ctrl_PushButton = QtWidgets.QPushButton(self.generalTab)
-        self.show_ctrl_PushButton.setGeometry(QtCore.QRect(240, 210, 101, 23))
-        self.show_ctrl_PushButton.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.show_ctrl_PushButton.setGeometry(QtCore.QRect(248, 210, 110, 23))
+        self.show_ctrl_PushButton.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.show_ctrl_PushButton.setDefault(False)
         self.show_ctrl_PushButton.setObjectName("show_ctrl_PushButton")
         
         self.line_7 = QtWidgets.QFrame(self.generalTab)
         self.line_7.setGeometry(QtCore.QRect(10, 240, 351, 20))
-        self.line_7.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_7.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_7.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_7.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_7.setObjectName("line_7")
 
         # Move skip background checkbox down to avoid overlap with background color label
@@ -134,14 +133,14 @@ class Ui_SettingsUI(object):
         
         # Move background color input down to match the label
         self.background_LineEdit = QtWidgets.QLineEdit(self.generalTab)
-        self.background_LineEdit.setGeometry(QtCore.QRect(180, 290, 131, 20))
-        self.background_LineEdit.setAlignment(QtCore.Qt.AlignCenter)
+        self.background_LineEdit.setGeometry(QtCore.QRect(180, 290, 92, 20))
+        self.background_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.background_LineEdit.setReadOnly(True)
         self.background_LineEdit.setObjectName("background_LineEdit")
         
         # Move color picker button down to match the input field
         self.color_picker_PushButton = QtWidgets.QPushButton(self.generalTab)
-        self.color_picker_PushButton.setGeometry(QtCore.QRect(320, 290, 31, 20))
+        self.color_picker_PushButton.setGeometry(QtCore.QRect(280, 290, 92, 20))
         self.color_picker_PushButton.setObjectName("color_picker_PushButton")
         
         # Move skip colors label down to not overlap with background color
@@ -201,8 +200,8 @@ class Ui_SettingsUI(object):
         
         self.line_2 = QtWidgets.QFrame(self.paintingTab)
         self.line_2.setGeometry(QtCore.QRect(10, 110, 351, 20))
-        self.line_2.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_2.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_2.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_2.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_2.setObjectName("line_2")
         
         self.update_canvas_CheckBox = QtWidgets.QCheckBox(self.paintingTab)
@@ -222,8 +221,8 @@ class Ui_SettingsUI(object):
         
         self.line_4 = QtWidgets.QFrame(self.paintingTab)
         self.line_4.setGeometry(QtCore.QRect(10, 310, 351, 20))
-        self.line_4.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_4.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_4.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_4.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_4.setObjectName("line_4")
         
         self.show_info_CheckBox = QtWidgets.QCheckBox(self.paintingTab)
@@ -299,8 +298,8 @@ class Ui_SettingsUI(object):
         
         self.line_5 = QtWidgets.QFrame(self.experimentalTab)
         self.line_5.setGeometry(QtCore.QRect(10, 140, 351, 20))
-        self.line_5.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_5.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_5.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_5.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_5.setObjectName("line_5")
         
         # Fix the brush type dropdown width to prevent left edge cutoff
@@ -309,16 +308,16 @@ class Ui_SettingsUI(object):
         self.brush_type_ComboBox.setObjectName("brush_type_ComboBox")
         
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap(":/brushes/light_round.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap(":/brushes/light_round.png"), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
         self.brush_type_ComboBox.addItem(icon, "")
         icon1 = QtGui.QIcon()
-        icon1.addPixmap(QtGui.QPixmap(":/brushes/heavy_round.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon1.addPixmap(QtGui.QPixmap(":/brushes/heavy_round.png"), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
         self.brush_type_ComboBox.addItem(icon1, "")
         icon2 = QtGui.QIcon()
-        icon2.addPixmap(QtGui.QPixmap(":/brushes/medium_round.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon2.addPixmap(QtGui.QPixmap(":/brushes/medium_round.png"), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
         self.brush_type_ComboBox.addItem(icon2, "")
         icon3 = QtGui.QIcon()
-        icon3.addPixmap(QtGui.QPixmap(":/brushes/heavy_square.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon3.addPixmap(QtGui.QPixmap(":/brushes/heavy_square.png"), QtGui.QIcon.Mode.Normal, QtGui.QIcon.State.Off)
         self.brush_type_ComboBox.addItem(icon3, "")
         
         self.label_23 = QtWidgets.QLabel(self.experimentalTab)
@@ -327,8 +326,8 @@ class Ui_SettingsUI(object):
         
         self.line_6 = QtWidgets.QFrame(self.experimentalTab)
         self.line_6.setGeometry(QtCore.QRect(10, 200, 351, 20))
-        self.line_6.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line_6.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line_6.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line_6.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line_6.setObjectName("line_6")
         
         self.click_color_PushButton = QtWidgets.QPushButton(self.experimentalTab)
@@ -340,12 +339,12 @@ class Ui_SettingsUI(object):
         self.aboutTab.setObjectName("aboutTab")
         
         self.gitRepoLinkLabel = QtWidgets.QLabel(self.aboutTab)
-        self.gitRepoLinkLabel.setGeometry(QtCore.QRect(20, 340, 221, 16))
-        self.gitRepoLinkLabel.setTextFormat(QtCore.Qt.RichText)
+        self.gitRepoLinkLabel.setGeometry(QtCore.QRect(20, 360, 221, 16))
+        self.gitRepoLinkLabel.setTextFormat(QtCore.Qt.TextFormat.RichText)
         self.gitRepoLinkLabel.setScaledContents(False)
-        self.gitRepoLinkLabel.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
+        self.gitRepoLinkLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeading|QtCore.Qt.AlignmentFlag.AlignLeft|QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.gitRepoLinkLabel.setOpenExternalLinks(True)
-        self.gitRepoLinkLabel.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+        self.gitRepoLinkLabel.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextBrowserInteraction)
         self.gitRepoLinkLabel.setObjectName("gitRepoLinkLabel")
         
         self.logo1Label = QtWidgets.QLabel(self.aboutTab)
@@ -356,7 +355,7 @@ class Ui_SettingsUI(object):
         self.logo1Label.setObjectName("logo1Label")
         
         self.aboutLabel = QtWidgets.QLabel(self.aboutTab)
-        self.aboutLabel.setGeometry(QtCore.QRect(20, 160, 331, 101))
+        self.aboutLabel.setGeometry(QtCore.QRect(20, 160, 331, 130))
         self.aboutLabel.setWordWrap(True)
         self.aboutLabel.setObjectName("aboutLabel")
         
@@ -369,30 +368,30 @@ class Ui_SettingsUI(object):
         self.versionLabel_2.setObjectName("versionLabel_2")
         
         self.licenseLabel = QtWidgets.QLabel(self.aboutTab)
-        self.licenseLabel.setGeometry(QtCore.QRect(20, 270, 311, 31))
+        self.licenseLabel.setGeometry(QtCore.QRect(20, 300, 311, 31))
         self.licenseLabel.setWordWrap(True)
         self.licenseLabel.setObjectName("licenseLabel")
         
         self.line = QtWidgets.QFrame(self.aboutTab)
-        self.line.setGeometry(QtCore.QRect(10, 310, 351, 20))
-        self.line.setFrameShape(QtWidgets.QFrame.HLine)
-        self.line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line.setGeometry(QtCore.QRect(10, 330, 351, 20))
+        self.line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        self.line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line.setObjectName("line")
         
         self.logo2Label = QtWidgets.QLabel(self.aboutTab)
-        self.logo2Label.setGeometry(QtCore.QRect(250, 340, 81, 81))
+        self.logo2Label.setGeometry(QtCore.QRect(250, 360, 81, 81))
         self.logo2Label.setText("")
         self.logo2Label.setPixmap(QtGui.QPixmap(":/icons/RustDaVinci-logo-1.png"))
         self.logo2Label.setScaledContents(True)
         self.logo2Label.setObjectName("logo2Label")
         
         self.faqLinkLabel_2 = QtWidgets.QLabel(self.aboutTab)
-        self.faqLinkLabel_2.setGeometry(QtCore.QRect(20, 360, 221, 16))
-        self.faqLinkLabel_2.setTextFormat(QtCore.Qt.RichText)
+        self.faqLinkLabel_2.setGeometry(QtCore.QRect(20, 380, 221, 16))
+        self.faqLinkLabel_2.setTextFormat(QtCore.Qt.TextFormat.RichText)
         self.faqLinkLabel_2.setScaledContents(False)
-        self.faqLinkLabel_2.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
+        self.faqLinkLabel_2.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeading|QtCore.Qt.AlignmentFlag.AlignLeft|QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.faqLinkLabel_2.setOpenExternalLinks(True)
-        self.faqLinkLabel_2.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+        self.faqLinkLabel_2.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextBrowserInteraction)
         self.faqLinkLabel_2.setObjectName("faqLinkLabel_2")
         
         self.tabWidget.addTab(self.aboutTab, "")
@@ -404,7 +403,7 @@ class Ui_SettingsUI(object):
         
         self.ok_PushButton = QtWidgets.QPushButton(SettingsUI)
         self.ok_PushButton.setGeometry(QtCore.QRect(105, 520, 75, 23))
-        self.ok_PushButton.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.ok_PushButton.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.ok_PushButton.setDefault(True)
         self.ok_PushButton.setObjectName("ok_PushButton")
         
@@ -533,4 +532,3 @@ class Ui_SettingsUI(object):
         self.theme_ComboBox.setToolTip(_translate("SettingsUI", "Select the application theme"))
         self.theme_ComboBox.setItemText(0, _translate("SettingsUI", "Dark"))
         self.theme_ComboBox.setItemText(1, _translate("SettingsUI", "Light"))
-        self.label_theme.setText(_translate("SettingsUI", "Application Theme:"))

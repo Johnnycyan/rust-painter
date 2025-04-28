@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QSettings
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QDialog, QLabel, QPushButton, QListWidgetItem
+from PyQt6.QtCore import QSettings
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import QDialog, QListWidgetItem
 
 from ui.settings.default_settings import default_settings
 from ui.dialogs.click_color.click_colorui import Ui_Click_ColorUI

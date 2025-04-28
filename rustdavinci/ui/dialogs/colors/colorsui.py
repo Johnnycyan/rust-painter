@@ -2,12 +2,12 @@
 
 # Form implementation generated from reading ui file 'colorsui.ui'
 #
-# Created by: PyQt5 UI code generator 5.13.0
+# Created by: PyQt6 UI code generator
 #
 # WARNING! All changes made in this file will be lost!
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 
 class Ui_ColorsUI(object):

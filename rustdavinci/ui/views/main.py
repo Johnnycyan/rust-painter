@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QRect, QSettings, QSize, Qt
-from PyQt5.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QPushButton
+from PyQt6.QtCore import QRect, QSettings, QSize, Qt
+from PyQt6.QtWidgets import QMenu, QLabel, QFrame, QMainWindow, QPushButton
 
 from ui.settings.settings import Settings
 from ui.views.mainui import Ui_MainUI
@@ -35,6 +35,9 @@ class MainWindow(QMainWindow):
 
         self.is_expanded = False
         self.label = None
+        self.small_width = 240
+        self.normal_height = 782
+        self.big_width = 950
 
     def connectAll(self):
         """Connect all the buttons"""
@@ -70,9 +73,9 @@ class MainWindow(QMainWindow):
             self.label.hide()
             self.expand_window()
         # Ensure window height is maintained
-        if self.height() < 580:
-            self.setMinimumHeight(580)
-            self.resize(self.width(), 580)
+        if self.height() < self.normal_height:
+            self.setMinimumHeight(self.normal_height)
+            self.resize(self.width(), self.normal_height)
 
     def load_image_URL_clicked(self):
         """Load image from URL"""
@@ -84,9 +87,9 @@ class MainWindow(QMainWindow):
             self.label.hide()
             self.expand_window()
         # Ensure window height is maintained
-        if self.height() < 580:
-            self.setMinimumHeight(580)
-            self.resize(self.width(), 580)
+        if self.height() < self.normal_height:
+            self.setMinimumHeight(self.normal_height)
+            self.resize(self.width(), self.normal_height)
 
     def clear_image_clicked(self):
         """Clear the current image"""
@@ -112,16 +115,16 @@ class MainWindow(QMainWindow):
     def settings_clicked(self):
         """Create an instance of a settings window"""
         settings = Settings(self)
-        settings.exec_()
+        settings.exec()  # Changed from exec_() to exec() in PyQt6
 
     def preview_clicked(self):
         """Expand the main window and create image object"""
         if self.is_expanded:
             self.ui.preview_PushButton.setText("Show Image >>")
             self.is_expanded = False
-            self.setMinimumSize(QSize(240, 580))
-            self.setMaximumSize(QSize(240, 580))
-            self.resize(240, 580)
+            self.setMinimumSize(QSize(self.small_width, self.normal_height))
+            self.setMaximumSize(QSize(self.small_width, self.normal_height))
+            self.resize(self.small_width, self.normal_height)
             if self.label is not None:
                 self.label.hide()
                 self.show_original_PushButton.hide()
@@ -136,16 +139,16 @@ class MainWindow(QMainWindow):
         self.ui.preview_PushButton.setText("<< Hide Image")
 
         # Set fixed size constraints
-        self.setMinimumSize(QSize(800, 580))
-        self.setMaximumSize(QSize(800, 580))
-        self.resize(800, 580)
+        self.setMinimumSize(QSize(self.big_width, self.normal_height))
+        self.setMaximumSize(QSize(self.big_width, self.normal_height))
+        self.resize(self.big_width, self.normal_height)
         
         # Force minimum height to ensure log_TextEdit and progress_ProgressBar remain visible
-        self.setMinimumHeight(580)
+        self.setMinimumHeight(self.normal_height)
 
         self.label = QLabel(self)
-        self.label.setGeometry(QRect(240, 10, 550, 380))
-        self.label.setFrameShape(QFrame.Panel)
+        self.label.setGeometry(QRect(240, 10, 700, 700))
+        self.label.setFrameShape(QFrame.Shape.Panel)  # Updated enum access pattern
         self.label.setLineWidth(1)
         self.label.show()
 
@@ -155,17 +158,17 @@ class MainWindow(QMainWindow):
             # There's only one processed image quality now
             pixmap = self.rustDaVinci.quantized_img_pixmap
 
-        pixmap = pixmap.scaled(550, 380, Qt.KeepAspectRatio)
-        self.label.setAlignment(Qt.AlignCenter)
+        pixmap = pixmap.scaled(700, 700, Qt.AspectRatioMode.KeepAspectRatio)  # Updated enum access pattern
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Updated enum access pattern
         self.label.setPixmap(pixmap)
 
         self.show_original_PushButton = QPushButton("Original", self)
-        self.show_original_PushButton.setGeometry(QRect(240, 400, 275, 21))
+        self.show_original_PushButton.setGeometry(QRect(240, 720, 345, 31))
         self.show_original_PushButton.show()
         self.show_original_PushButton.clicked.connect(self.show_original_pixmap)
 
         self.show_processed_PushButton = QPushButton("Processed", self)
-        self.show_processed_PushButton.setGeometry(QRect(515, 400, 275, 21))
+        self.show_processed_PushButton.setGeometry(QRect(595, 720, 345, 31))
         self.show_processed_PushButton.show()
         self.show_processed_PushButton.clicked.connect(self.show_processed_pixmap)
 
@@ -177,9 +180,9 @@ class MainWindow(QMainWindow):
         self.show_processed_PushButton.hide()
         self.expand_window()
         # Additional height enforcement
-        if self.height() < 580:
-            self.setMinimumHeight(580)
-            self.resize(self.width(), 580)
+        if self.height() < self.normal_height:
+            self.setMinimumHeight(self.normal_height)
+            self.resize(self.width(), self.normal_height)
 
     def show_processed_pixmap(self):
         """Show the processed image pixmap"""
@@ -189,9 +192,9 @@ class MainWindow(QMainWindow):
         self.show_processed_PushButton.hide()
         self.expand_window()
         # Additional height enforcement
-        if self.height() < 580:
-            self.setMinimumHeight(580)
-            self.resize(self.width(), 580)
+        if self.height() < self.normal_height:
+            self.setMinimumHeight(self.normal_height)
+            self.resize(self.width(), self.normal_height)
 
     def show(self):
         """Show the main window"""
