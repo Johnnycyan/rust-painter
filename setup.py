@@ -10,16 +10,26 @@ AUTHOR = "Alexander Emanuelsson"
 EMAIL = "Alexander.Emanuelsson94@gmail.com"
 URL = "https://github.com/Johnnycyan/rust-painter"
 REQUIRED = [
-    "Pillow==8.3.2",
-    "PyAutoGUI==0.9.41",
+    "colorama==0.4.6",
+    "MouseInfo==0.1.3",
+    "numpy==2.2.5",
+    "opencv-python==4.11.0.86",
+    "pillow==11.2.1",
+    "PyAutoGUI==0.9.54",
+    "PyGetWindow==0.0.9",
+    "PyMsgBox==1.0.9",
+    "pynput==1.8.1",
+    "pyperclip==1.9.0",
     "pypiwin32==223",
-    "colorama==0.4.1",
-    "termcolor==1.1.0",
-    "pynput==1.4.2",
-    "numpy==1.16.2",
-    "opencv-python==4.0.0.21",
-    "pyqt5-tools==5.13.0.1.5",
-    "PyQt5==5.13.1"
+    "PyQt6==6.9.0",
+    "PyQt6-Qt6==6.9.0",
+    "PyQt6_sip==13.10.0",
+    "PyRect==0.2.0",
+    "PyScreeze==1.0.1",
+    "pytweening==1.2.0",
+    "pywin32==310",
+    "six==1.17.0",
+    "termcolor==3.0.1"
 ]
 
 with open("README.md") as file:
