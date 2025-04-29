@@ -19,7 +19,10 @@ import os
 from lib.rustPaletteData import rust_palette
 from lib.captureArea import capture_area
 from lib.color_functions import hex_to_rgb, rgb_to_hex
-from lib.color_blending import find_optimal_layers, create_layered_colors_map, simulate_layered_image, alpha_blend
+from lib.color_blending import find_optimal_layers_numba as find_optimal_layers
+from lib.color_blending import create_layered_colors_map_numba as create_layered_colors_map
+from lib.color_blending import simulate_layered_image_numba as simulate_layered_image
+from lib.color_blending import alpha_blend_numba as alpha_blend
 from ui.dialogs.captureDialog import CaptureAreaDialog
 from ui.settings.default_settings import default_settings
 
@@ -505,45 +508,16 @@ class rustDaVinci:
             # Define the opacity values
             # These are SEPARATE from the base colors and are applied during painting
             self.opacity_values = [1.0, 0.75, 0.5, 0.25]
-            
-            # Check if we can use multiprocessing for better performance
-            try:
-                import multiprocessing
-                # Only use parallel processing if we have at least 2 cores and a big enough image
-                if multiprocessing.cpu_count() > 1 and total_pixels > 50000:
-                    from lib.color_blending import create_layered_colors_map_parallel
-                    self.parent.ui.log_TextEdit.append(f"Using parallel processing with {multiprocessing.cpu_count()} cores")
-                    self.layered_colors_map = create_layered_colors_map_parallel(
-                        temp_img,
-                        background_color,
-                        self.base_palette_colors,
-                        self.opacity_values,
-                        max_layers=2,
-                        update_callback=update_progress
-                    )
-                else:
-                    # Fall back to single-threaded for small images
-                    from lib.color_blending import create_layered_colors_map
-                    self.layered_colors_map = create_layered_colors_map(
-                        temp_img,
-                        background_color,
-                        self.base_palette_colors,
-                        self.opacity_values,
-                        max_layers=2,
-                        update_callback=update_progress
-                    )
-            except (ImportError, AttributeError) as e:
-                # Fall back to single-threaded if multiprocessing fails
-                self.parent.ui.log_TextEdit.append(f"Using single-threaded processing: {str(e)}")
-                from lib.color_blending import create_layered_colors_map
-                self.layered_colors_map = create_layered_colors_map(
-                    temp_img,
-                    background_color,
-                    self.base_palette_colors,
-                    self.opacity_values,
-                    max_layers=2,
-                    update_callback=update_progress
-                )
+
+            from lib.color_blending import create_layered_colors_map
+            self.layered_colors_map = create_layered_colors_map(
+                temp_img,
+                background_color,
+                self.base_palette_colors,
+                self.opacity_values,
+                max_layers=2,
+                update_callback=update_progress
+            )
                 
             # Close the progress dialog
             self.progress_dialog.close()
@@ -553,7 +527,6 @@ class rustDaVinci:
                 return None
                 
             # Create the simulated output image
-            from lib.color_blending import simulate_layered_image
             self.simulated_img = simulate_layered_image(
                 temp_img,
                 background_color,
