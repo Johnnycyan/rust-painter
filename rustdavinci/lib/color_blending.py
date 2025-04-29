@@ -12,6 +12,7 @@ import time
 from collections import defaultdict
 from lib.color_functions import hex_to_rgb, rgb_to_hex
 from lib.rustPaletteData import rust_palette
+import torch
 
 # Global variable for cancellation support across processes
 _cancel_processing = False
@@ -155,10 +156,140 @@ def find_optimal_layers(target_color, background_color, base_colors, opacity_lev
     
     return layers
 
-
-def create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
+def find_optimal_layers_batch_gpu(target_colors, background_color, base_colors, opacity_levels, max_layers=3, device='cuda'):
     """
-    Process an entire image to find the optimal color layering for each pixel.
+    GPU-accelerated batch version of find_optimal_layers that processes multiple colors at once.
+    This function is the key to actual GPU acceleration performance.
+    
+    Args:
+        target_colors: List of target RGB colors to achieve, each as (R,G,B) tuple
+        background_color: RGB tuple of background color
+        base_colors: List of available base colors (RGB tuples)
+        opacity_levels: List of available opacity values (0-1)
+        max_layers: Maximum number of layers to apply
+        device: Device to perform computations on ('cuda' or 'cpu')
+        
+    Returns:
+        list: A list of lists containing (color_index, opacity_index) tuples for each target color
+    """
+    # Handle empty input
+    if len(target_colors) == 0:
+        return []
+    
+    # Print debugging info
+    print(f"Processing {len(target_colors)} colors on {device}")
+    
+    # Convert inputs to PyTorch tensors
+    n_targets = len(target_colors)
+    target_tensor = torch.tensor(target_colors, dtype=torch.float32, device=device) / 255.0
+    bg_tensor = torch.tensor(background_color, dtype=torch.float32, device=device) / 255.0
+    
+    # Create palette tensor [n_colors, 3]
+    palette_tensor = torch.tensor(base_colors, dtype=torch.float32, device=device) / 255.0
+    opacity_tensor = torch.tensor(opacity_levels, dtype=torch.float32, device=device)
+    
+    # Expand dimensions for broadcasting
+    # bg_tensor shape: [1, 3]
+    bg_tensor = bg_tensor.unsqueeze(0)
+    
+    # Initialize results and starting colors
+    all_layers = [[] for _ in range(n_targets)]
+    current_colors = bg_tensor.expand(n_targets, 3)
+    
+    # Calculate initial distance to target for each color
+    # Use weighted Euclidean distance with perceptual weights
+    weights = torch.tensor([0.3, 0.6, 0.1], device=device)
+    
+    # Calculate how far each target color is from current color (background)
+    delta = current_colors - target_tensor
+    initial_distances = torch.sqrt(torch.sum(weights * (delta ** 2), dim=1))
+    
+    # Early termination for colors that are already close to background
+    # Use a more permissive threshold to ensure we're not filtering out too many pixels
+    close_mask = initial_distances < 0.05  # Much lower threshold than before (was 1.0)
+    active_mask = ~close_mask
+    
+    # For each layer (up to max_layers)
+    for layer_idx in range(max_layers):
+        if not torch.any(active_mask):
+            break
+            
+        # Only process colors that still need layers
+        active_targets = target_tensor[active_mask]
+        active_current = current_colors[active_mask]
+        active_indices = torch.where(active_mask)[0]
+        
+        n_active = len(active_indices)
+        if n_active == 0:
+            break
+            
+        # Find best layer for each active target
+        best_distances = torch.full([n_active], float('inf'), device=device)
+        best_color_indices = torch.zeros([n_active], dtype=torch.long, device=device)
+        best_opacity_indices = torch.zeros([n_active], dtype=torch.long, device=device)
+        best_results = torch.zeros([n_active, 3], dtype=torch.float32, device=device)
+        
+        # For each combination of base color and opacity
+        for color_idx, color in enumerate(palette_tensor):
+            # Skip calculation for distant colors (optimization)
+            color_expanded = color.unsqueeze(0).expand(n_active, 3)
+            base_distance = torch.sqrt(torch.sum(weights * ((color_expanded - active_targets) ** 2), dim=1))
+            skip_mask = (base_distance > 8 * initial_distances[active_mask]) & (layer_idx > 0)
+            
+            if torch.all(skip_mask):
+                continue
+                
+            for opacity_idx, opacity in enumerate(opacity_tensor):
+                if opacity == 0:  # Skip 0% opacity
+                    continue
+                
+                # Alpha blend calculation on GPU
+                # result = current * (1-opacity) + color * opacity
+                result = active_current * (1-opacity) + color_expanded * opacity
+                
+                # Calculate distance to target
+                delta = result - active_targets
+                distances = torch.sqrt(torch.sum(weights * (delta ** 2), dim=1))
+                
+                # Update best for each target if this layer is better
+                better_mask = distances < best_distances
+                
+                if torch.any(better_mask):
+                    best_distances[better_mask] = distances[better_mask]
+                    best_color_indices[better_mask] = color_idx
+                    best_opacity_indices[better_mask] = opacity_idx
+                    best_results[better_mask] = result[better_mask]
+        
+        # For each active target, check if we found an improvement
+        # Use a very small improvement threshold to capture more subtle improvements
+        current_distances = torch.sqrt(torch.sum(weights * ((active_current - active_targets) ** 2), dim=1))
+        improvement_mask = best_distances < (current_distances - 0.01)  # Was 0.05, now more permissive
+        
+        # Apply best layers where there's improvement
+        for i, (improve, active_idx) in enumerate(zip(improvement_mask, active_indices)):
+            if improve:
+                # Add the layer to results
+                all_layers[active_idx].append((int(best_color_indices[i].item()), int(best_opacity_indices[i].item())))
+                
+                # Update current color for this target
+                current_colors[active_idx] = best_results[i]
+                
+                # Check if we're close enough - use a more permissive threshold
+                if best_distances[i] < 5.0:  # Was 2.0, now more permissive
+                    active_mask[active_idx] = False
+            else:
+                # No improvement possible for this target
+                active_mask[active_idx] = False
+    
+    # Check if any layers were found
+    total_layers = sum(len(layers) for layers in all_layers)
+    print(f"Found {total_layers} total layers for {len(target_colors)} colors")
+    
+    return all_layers
+
+def create_layered_colors_map_gpu(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
+    """
+    GPU-accelerated version of create_layered_colors_map using PyTorch.
     
     Args:
         image: PIL Image object
@@ -175,6 +306,417 @@ def create_layered_colors_map(image, background_color, palette_colors, opacity_v
     global _cancel_processing
     _cancel_processing = False
     
+    # Check if CUDA is available
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if device.type == 'cuda':
+        print(f"Using GPU acceleration: {torch.cuda.get_device_name(0)}")
+        # Verify we actually have GPU compute capability
+        try:
+            # Create a small test tensor and perform a simple operation
+            test_tensor = torch.ones((10, 10), device=device)
+            test_result = test_tensor * 2
+            # Force synchronization to ensure GPU is responsive
+            torch.cuda.synchronize()
+            print("GPU compute test successful")
+        except Exception as e:
+            print(f"Warning: GPU detected but test failed: {e}")
+            print("Falling back to CPU")
+            device = torch.device('cpu')
+    else:
+        print("CUDA not available, using CPU with PyTorch")
+    
+    width, height = image.size
+    pixel_data = image.load()
+    layered_colors = {}
+    
+    # Cache for already calculated color mappings
+    color_cache = {}
+    
+    # Performance metrics
+    total_pixels = width * height
+    processed_pixels = 0
+    start_time = time.time()
+    update_interval = max(1, total_pixels // 100)  # Update every 1% of pixels
+    last_update_time = start_time
+    
+    # Convert PIL image to numpy array
+    np_image = np.array(image, dtype=np.uint8)  # Keep as uint8 for now
+    
+    # Color similarity bucketing for faster processing
+    # Group similar colors together to avoid recalculating
+    color_groups = defaultdict(list)
+    
+    # Use downsampling for large images to identify unique colors
+    downsample = max(1, min(width, height) // 800)
+    downsample_active = total_pixels > 200000
+    
+    # First pass - identify unique colors and build color groups
+    print("Identifying unique colors...")
+    unique_colors = set()
+    for y in range(0, height, 1 + (downsample if downsample_active else 0)):
+        for x in range(0, width, 1 + (downsample if downsample_active else 0)):
+            rgb = pixel_data[x, y]
+            if isinstance(rgb, int):  # Handle grayscale images
+                rgb = (rgb, rgb, rgb)
+            unique_colors.add(tuple(map(int, rgb[:3])))  # Convert to regular tuple and ensure it's RGB
+    
+    print(f"Found {len(unique_colors)} unique colors")
+    
+    # Create color buckets (group similar colors)
+    for color in unique_colors:
+        # Use larger buckets (less granular) for faster computation
+        bucket_key = (color[0]//8, color[1]//8, color[2]//8)
+        color_groups[bucket_key].append(color)
+    
+    # Calculate optimal layers for each color bucket
+    bucket_layers = {}
+    bucket_count = len(color_groups)
+    bucket_processed = 0
+    
+    # For each bucket, calculate the average color
+    print(f"Processing {bucket_count} color buckets")
+    
+    # Process all buckets at once using GPU batch processing
+    bucket_keys = []
+    avg_colors = []
+    
+    for bucket_key, colors in color_groups.items():
+        # Use the average color in this bucket
+        r_sum = g_sum = b_sum = 0
+        for color in colors:
+            r_sum += color[0]
+            g_sum += color[1]
+            b_sum += color[2]
+        avg_color = (
+            int(r_sum / len(colors)),
+            int(g_sum / len(colors)),
+            int(b_sum / len(colors))
+        )
+        bucket_keys.append(bucket_key)
+        avg_colors.append(avg_color)
+        
+        # Update progress for bucket calculations
+        bucket_processed += 1
+        if update_callback and time.time() - last_update_time > 0.25:
+            last_update_time = time.time()
+            bucket_percent = int((bucket_processed / bucket_count) * 25)  # First 25% of progress
+            elapsed = time.time() - start_time
+            remaining = (elapsed / bucket_percent) * (100 - bucket_percent) if bucket_percent > 0 else 0
+            stop_processing = update_callback(bucket_percent, elapsed, remaining)
+            if stop_processing:
+                _cancel_processing = True
+                return {}
+    
+    # Process all buckets in efficient GPU batches
+    print("Calculating optimal color layers using GPU...")
+    
+    # Use a smaller batch size to avoid memory issues and prevent looping
+    batch_size = 1024  # Reduced from 1024 to 256 for better stability
+    
+    # Track how many empty vs non-empty buckets we get
+    empty_buckets = 0
+    non_empty_buckets = 0
+    
+    # Track batch progress to detect infinite loops
+    total_batches = (len(avg_colors) + batch_size - 1) // batch_size
+    print(f"Processing {total_batches} batches of colors (batch size = {batch_size})")
+    
+    # Track time for each batch to detect stuck batches
+    batch_timeout = 60  # seconds - timeout for a stuck batch
+    
+    for batch_idx, i in enumerate(range(0, len(avg_colors), batch_size)):
+        if _cancel_processing:
+            return {}
+        
+        print(f"Processing batch {batch_idx+1}/{total_batches}...")
+        batch_start_time = time.time()
+        
+        # Extract the batch
+        end_idx = min(i + batch_size, len(avg_colors))
+        batch_avg_colors = avg_colors[i:end_idx]
+        batch_keys = bucket_keys[i:end_idx]
+        
+        # Ensure we have a reasonable batch
+        if len(batch_avg_colors) == 0:
+            print("Warning: Empty batch detected, skipping")
+            continue
+        
+        try:
+            # Set a timeout for this batch
+            should_timeout = False
+            
+            # Process this batch of colors using the GPU batch function
+            batch_layers = find_optimal_layers_batch_gpu(
+                batch_avg_colors,
+                background_color,
+                palette_colors,
+                opacity_values,
+                max_layers,
+                device=device
+            )
+            
+            # Check if batch processing took too long
+            batch_time = time.time() - batch_start_time
+            if batch_time > batch_timeout:
+                print(f"Warning: Batch {batch_idx+1} took too long ({batch_time:.1f}s), may have been stuck")
+            
+            # Store results
+            for j, layers in enumerate(batch_layers):
+                if layers:
+                    bucket_layers[batch_keys[j]] = layers
+                    non_empty_buckets += 1
+                else:
+                    empty_buckets += 1
+                
+        except Exception as e:
+            print(f"Error processing batch {batch_idx+1}: {e}")
+            # Skip this batch and continue with the next one
+            continue
+            
+        # Free some GPU memory after each batch
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+            
+        # Update progress
+        if update_callback and time.time() - last_update_time > 0.25:
+            last_update_time = time.time()
+            batch_percent = 25 + int((batch_idx / total_batches) * 25)  # 25-50% progress
+            elapsed = time.time() - start_time
+            remaining = (elapsed / batch_percent) * (100 - batch_percent) if batch_percent > 0 else 0
+            stop_processing = update_callback(batch_percent, elapsed, remaining)
+            if stop_processing:
+                _cancel_processing = True
+                return {}
+    
+    print(f"Bucket layer calculation complete: {non_empty_buckets} non-empty buckets, {empty_buckets} empty buckets")
+    
+    # If we have no bucket layers at all, something is wrong - fall back to CPU implementation
+    if non_empty_buckets == 0:
+        print("WARNING: No paintable buckets found using GPU. Falling back to CPU implementation.")
+        return create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
+    
+    # Second pass - detect edges and assign colors to pixels
+    print("Detecting edges for detailed processing...")
+    
+    # Convert numpy array to PyTorch tensor
+    torch_image = torch.from_numpy(np_image).float().to(device) / 255.0
+    
+    # Create tensors for edge detection
+    if torch_image.shape[2] == 3:  # RGB image
+        gray_image = 0.299 * torch_image[:,:,0] + 0.587 * torch_image[:,:,1] + 0.114 * torch_image[:,:,2]
+        gray_image = gray_image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+    
+        # Simple edge detection kernels
+        sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)
+        sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0)
+    
+        # Apply convolution for edge detection
+        try:
+            import torch.nn.functional as F
+            edges_x = F.conv2d(gray_image, sobel_x, padding=1)
+            edges_y = F.conv2d(gray_image, sobel_y, padding=1)
+            edges = torch.sqrt(edges_x ** 2 + edges_y ** 2)
+            # Normalize to 0-1
+            edge_threshold = 0.1  # Threshold for edge detection
+            edge_mask = (edges > edge_threshold).squeeze().cpu().numpy()
+            print("Edge detection completed")
+        except Exception as e:
+            print(f"Error in edge detection: {e}")
+            edge_mask = np.zeros((height, width), dtype=bool)
+    else:
+        edge_mask = np.zeros((height, width), dtype=bool)
+    
+    # Process pixels in batches for the second pass
+    print("Processing pixels with edge detection...")
+    
+    # Collect important pixels for separate batch processing
+    important_pixels = []
+    important_coords = []
+    
+    # Collect normal pixels that can use bucket results
+    normal_pixels = {}
+    
+    # Count of pixels that get layer assignments
+    pixels_with_layers = 0
+    
+    # Group and classify pixels
+    for y in range(height):
+        if _cancel_processing:
+            return {}
+            
+        for x in range(width):
+            rgb = pixel_data[x, y]
+            
+            # Convert pixel data to RGB tuple (handles various PIL image modes)
+            if isinstance(rgb, int):  # Handle grayscale images
+                color_tuple = (rgb, rgb, rgb)
+            else:
+                # Ensure we have at least 3 components for RGB
+                if len(rgb) >= 3:
+                    color_tuple = tuple(map(int, rgb[:3]))
+                else:
+                    # Fallback for unexpected format
+                    color_tuple = (0, 0, 0)
+            
+            # Use the same bucket key calculation as before
+            bucket_key = (color_tuple[0]//8, color_tuple[1]//8, color_tuple[2]//8)
+            
+            # Get layers from bucket
+            layers = bucket_layers.get(bucket_key, [])
+            
+            # Check if this is an important pixel (edge)
+            is_important_pixel = False
+            if 0 <= y < edge_mask.shape[0] and 0 <= x < edge_mask.shape[1]:
+                is_important_pixel = edge_mask[y, x]
+            
+            if is_important_pixel:
+                # Add to batch for GPU processing
+                important_pixels.append(color_tuple)
+                important_coords.append((x, y))
+            elif layers:
+                # Use pre-calculated bucket results
+                normal_pixels[(x, y)] = layers
+                pixels_with_layers += 1
+            
+            # Update progress periodically
+            processed_pixels += 1
+            if update_callback and processed_pixels % update_interval == 0:
+                percent = 50 + int((processed_pixels / total_pixels) * 40)  # 50-90% progress
+                elapsed = time.time() - start_time
+                remaining = (elapsed / percent) * (100 - percent) if percent > 0 else 0
+                stop_processing = update_callback(percent, elapsed, remaining)
+                if stop_processing:
+                    _cancel_processing = True
+                    return {}
+    
+    print(f"Found {len(important_pixels)} important pixels that need detailed processing")
+    print(f"Found {pixels_with_layers} normal pixels with layers from buckets")
+    
+    # Free some GPU memory before processing important pixels
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    
+    # Now batch process the important pixels - use smaller batch size for important pixels
+    if important_pixels:
+        # Use smaller batches for important pixels to prevent memory issues
+        important_batch_size = 1024  # Even smaller batch size for important pixel processing
+        
+        # Calculate total important pixel batches
+        total_important_batches = (len(important_pixels) + important_batch_size - 1) // important_batch_size
+        print(f"Processing {total_important_batches} batches of important pixels (batch size = {important_batch_size})")
+        
+        # Process important pixels in batches
+        for batch_idx, i in enumerate(range(0, len(important_pixels), important_batch_size)):
+            if _cancel_processing:
+                return {}
+                
+            print(f"Processing important pixel batch {batch_idx+1}/{total_important_batches}...")
+            batch_start_time = time.time()
+            
+            # Extract the batch
+            end_idx = min(i + important_batch_size, len(important_pixels))
+            batch_pixels = important_pixels[i:end_idx]
+            batch_coords = important_coords[i:end_idx]
+            
+            try:
+                # Process this batch of pixels using GPU
+                batch_layers = find_optimal_layers_batch_gpu(
+                    batch_pixels,
+                    background_color,
+                    palette_colors,
+                    opacity_values,
+                    max_layers,
+                    device=device
+                )
+                
+                # Check for timeout
+                batch_time = time.time() - batch_start_time
+                if batch_time > batch_timeout:
+                    print(f"Warning: Important pixel batch {batch_idx+1} took too long ({batch_time:.1f}s)")
+                
+                # Store non-empty results
+                for j, layers in enumerate(batch_layers):
+                    if layers:  # Only store pixels that need painting
+                        layered_colors[batch_coords[j]] = layers
+                        pixels_with_layers += 1
+                        
+            except Exception as e:
+                print(f"Error processing important pixel batch {batch_idx+1}: {e}")
+                # Skip this batch and continue with the next one
+                continue
+                
+            # Free GPU memory after each batch
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                
+            # Update progress
+            if update_callback:
+                percent = 90 + int((batch_idx / total_important_batches) * 10)  # 90-100% progress
+                elapsed = time.time() - start_time
+                remaining = (elapsed / percent) * (100 - percent) if percent > 0 else 0
+                update_callback(percent, elapsed, remaining)
+    
+    # Add normal pixels to results
+    layered_colors.update(normal_pixels)
+    
+    # Check if we have enough pixels to paint
+    if len(layered_colors) < 10:
+        print("WARNING: Hardly any paintable pixels found using GPU. Falling back to CPU implementation.")
+        return create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
+    
+    # Final progress update
+    if update_callback:
+        elapsed = time.time() - start_time
+        update_callback(100, elapsed, 0)  # Complete
+    
+    # Free GPU memory
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    
+    print(f"Finished processing {len(layered_colors)} paintable pixels")
+    return layered_colors
+
+def create_layered_colors_map(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
+    """
+    Process an entire image to find the optimal color layering for each pixel.
+    This function will automatically use GPU acceleration if available.
+    
+    Args:
+        image: PIL Image object
+        background_color: RGB tuple of background color
+        palette_colors: List of base RGB colors
+        opacity_values: List of opacity values (0-1)
+        max_layers: Maximum number of layers to apply
+        update_callback: Function to call with progress updates (percentage, time_elapsed, time_remaining)
+        
+    Returns:
+        dict: A dictionary mapping pixel coordinates to layers list
+    """
+    # Use GPU version if torch is available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            print("CUDA GPU detected, attempting GPU acceleration")
+            return create_layered_colors_map_gpu(image, background_color, palette_colors, 
+                                                opacity_values, max_layers, update_callback)
+        elif torch.__version__ >= '2.0.0':
+            print("Modern PyTorch CPU detected, using optimized implementation")
+            return create_layered_colors_map_gpu(image, background_color, palette_colors, 
+                                                opacity_values, max_layers, update_callback)
+        else:
+            print("PyTorch available but no GPU detected, using standard CPU implementation")
+    except ImportError:
+        print("PyTorch not available, using CPU-only implementation")
+    except Exception as e:
+        print(f"Error initializing GPU acceleration: {e}")
+        print("Falling back to CPU implementation")
+    
+    # Rest of the CPU implementation follows...
+    # Reset cancellation flag
+    global _cancel_processing
+    _cancel_processing = False
+    
+    # Original CPU implementation follows
     width, height = image.size
     pixel_data = image.load()
     layered_colors = {}
