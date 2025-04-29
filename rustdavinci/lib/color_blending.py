@@ -743,8 +743,10 @@ def simulate_layered_image_numba(image, background_color, palette_colors, opacit
     
     return simulated
 
+
+# These functions need to be at module level for multiprocessing to work
 def _process_color_chunk(chunk_data):
-    """Process a chunk of colors"""
+    """Process a chunk of colors for multiprocessing"""
     # Unpack the arguments from the tuple
     bucket_items, background_color, palette_colors, opacity_values, max_layers = chunk_data
     
@@ -772,7 +774,7 @@ def _process_color_chunk(chunk_data):
     return local_results
 
 def _process_image_strip(strip_data):
-    """Process an image strip"""
+    """Process an image strip for multiprocessing"""
     # Unpack the arguments from the tuple
     strip_bounds, image_data, width, height, bucket_layers, background_color, palette_colors, opacity_values, max_layers = strip_data
     
@@ -840,6 +842,11 @@ def set_cancel_flag(cancel=True):
     global _cancel_processing
     _cancel_processing = cancel
     print(f"Cancellation flag set to: {_cancel_processing}")
+
+def create_layered_colors_map_parallel(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
+    """Replaced with Numba-optimized version for better single-core performance"""
+    print("Multiprocessing version has been replaced with Numba-optimized single process version")
+    return create_layered_colors_map_optimized(image, background_color, palette_colors, opacity_values, max_layers, update_callback)
 
 def create_layered_colors_map_optimized(image, background_color, palette_colors, opacity_values, max_layers=2, update_callback=None):
     """
