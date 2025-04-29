@@ -158,9 +158,15 @@ class MainWindow(QMainWindow):
             # There's only one processed image quality now
             pixmap = self.rustDaVinci.quantized_img_pixmap
 
-        pixmap = pixmap.scaled(700, 700, Qt.AspectRatioMode.KeepAspectRatio)  # Updated enum access pattern
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Updated enum access pattern
-        self.label.setPixmap(pixmap)
+        # Check if pixmap is None before trying to scale it
+        if pixmap is None:
+            # Handle the case when pixmap is None (image processing was canceled)
+            self.label.setText("No image available")
+            self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        else:
+            pixmap = pixmap.scaled(700, 700, Qt.AspectRatioMode.KeepAspectRatio)  # Updated enum access pattern
+            self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Updated enum access pattern
+            self.label.setPixmap(pixmap)
 
         self.show_original_PushButton = QPushButton("Original", self)
         self.show_original_PushButton.setGeometry(QRect(240, 720, 345, 31))
